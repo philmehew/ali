@@ -5,12 +5,50 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const aliLogo = `
+                      -#######-
+                    #############
+                  ################
+                  #################
+                  #################
+                  ##++++#---+++####
+                   ++++-----++++##-
+                   ++#+---##++++#--
+                   +++++---+---+++
+                    ++-+------+++++++++.
+              ++###  ++++----++++++++--+++++
+           -+++#####+#+++++++++++++#######++++++
+          -+#########+#++++-++++++##########+-++++
+         -##########--++++++++++#############+--+++
+         -########+-+++++++++++++######+++####+--+++
+         -#######+++++++++++++++++##############-+++
+         -######++++++------+++-+--############.-+++
+         ++####+.+-++-------+++++------#######-#-+++
+          -#++..+--+++------+++++-------+-####.#-++++
+          ++--++----++++----+++++------++#..-+..+++++-
+          ++---+---+#+++++-++++++---++++++++#+++++++++
+         ++++--++-++#+++++++++++++++++++++++#++-+-+++++
+         ++++---++++  +++++++++++++--+++++++##++++++++++
+         +++++---++.  +++++++++--------++++++#+++++++++++
+          ++++----+   ++++++++++------+++++++#++++++++++
+           ++++++++   +++++++++++-----+++++++++++++++++-
+           +++++++    ++++++++++++++++++++++++   +++++.
+             ++-      ##++++++++++++++-+++++#      ++.
+                      ###+---+#++++++++######
+                      +##-#-++..##############-
+                     #-------++.############-..-
+                     ----.--.... .........##....
+                    -.---..--... .. ......#+#  .
+
+Manage and execute parametric command-line snippets.
+A structured alternative to shell aliases and history -- no sourcing, no .bashrc edits.`
+
 // NewRootCmd creates and returns the root cobra command for ali.
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "ali",
 		Short: "Manage and execute parametric command-line snippets",
-		Long:  "ali is a CLI tool for managing and executing command-line snippets with parameter support.",
+		Long:  aliLogo,
 	}
 
 	rootCmd.AddCommand(newAddCmd())
@@ -45,7 +83,7 @@ func InterceptArgs(args []string, knownSubcommands map[string]bool) []string {
 		if knownSubcommands[args[i]] {
 			return args
 		}
-		// Not a known subcommand — insert "run" before this arg.
+		// Not a known subcommand -- insert "run" before this arg.
 		newArgs := make([]string, 0, len(args)+1)
 		newArgs = append(newArgs, args[:i]...)
 		newArgs = append(newArgs, "run")

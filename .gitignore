@@ -22,6 +22,8 @@ vendor/
 *.swp
 *.swo
 *~
+*.log
+*_log.*
 
 # OS
 .DS_Store
