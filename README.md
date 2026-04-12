@@ -55,24 +55,23 @@ Requires Go 1.22+ (go.mod tracks the installed version).
 
 ### Add to PATH
 
-After installing, add ali to your PATH by running:
+Run `ali init` to output the shell configuration for your system. It auto-detects your shell from `$SHELL`, or you can specify one explicitly:
 
 ```bash
-eval "$(ali init)"
-```
-
-This detects your shell from `$SHELL` and outputs the appropriate configuration. Add it to your shell profile (`~/.zshrc`, `~/.bashrc`, etc.) to persist across sessions:
-
-```bash
-echo 'eval "$(ali init)"' >> ~/.zshrc
-```
-
-You can also specify a shell explicitly:
-
-```bash
+ali init        # auto-detect
 ali init bash   # bash
 ali init zsh    # zsh
 ali init fish   # fish
+```
+
+It prints an `export PATH=...` line, plus the commands to persist it. Follow the two steps it outputs — add the export to your shell profile, then reload:
+
+```bash
+# Step 1: add to your profile (example for zsh)
+echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc
+
+# Step 2: reload
+source ~/.zshrc
 ```
 
 ## Quick Start
@@ -255,32 +254,18 @@ ali init zsh
 ali init fish
 ```
 
-The output includes step-by-step instructions:
+The output includes the `export PATH=...` line and step-by-step instructions to persist it:
 
 ```
 # ali v1.0.0: add to your shell profile (~/.zshrc):
-export PATH="/Users/you:$PATH"
+export PATH="/Users/you/go/bin:$PATH"
 
 # Step 1: Add to your profile:
-echo 'export PATH="/Users/you:$PATH"' >> ~/.zshrc
+echo 'export PATH="/Users/you/go/bin:$PATH"' >> ~/.zshrc
 
 # Step 2: Reload your profile:
 source ~/.zshrc
 ```
-
-**Step 1** — Add to your shell profile (persists across sessions):
-```bash
-echo 'export PATH="/path/to/ali:$PATH"' >> ~/.zshrc    # zsh
-echo 'export PATH="/path/to/ali:$PATH"' >> ~/.bashrc   # bash
-```
-
-**Step 2** — Reload your profile for it to take effect:
-```bash
-source ~/.zshrc    # zsh
-source ~/.bashrc   # bash
-```
-
-Or simply restart your terminal.
 
 ### `ali version`
 
@@ -421,7 +406,7 @@ The `github-secure.sh` script configures repository security settings and branch
 
 - **Secret scanning** — detects secrets committed to the repo
 - **Push protection** — blocks pushes containing detected secrets
-- **Branch protection** — requires 1 approval, linear history, conversation resolution; enforces admin restrictions; disables force pushes and deletions
+- **Branch protection** — requires PRs, linear history, conversation resolution; enforces admin restrictions; disables force pushes and deletions
 
 **Usage:**
 

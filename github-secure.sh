@@ -42,7 +42,7 @@ cat > "$PROT_FILE" <<'EOF'
   "required_status_checks": null,
   "enforce_admins": true,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 1,
+    "required_approving_review_count": 0,
     "dismiss_stale_reviews": true,
     "require_code_owner_reviews": false
   },
@@ -57,7 +57,7 @@ cat > "$PROT_FILE" <<'EOF'
 EOF
 
 if gh api "repos/$REPO/branches/$BRANCH/protection" --method PUT --input "$PROT_FILE" > /dev/null 2>&1; then
-  echo "✅ Branch protection optimized (1 approval, linear history, no force pushes)"
+  echo "✅ Branch protection optimized (PRs required, linear history, no force pushes)"
 else
   echo "❌ Failed to set branch protection" >&2
   exit 1
@@ -77,7 +77,7 @@ echo "  Reviews required: $FINAL_REVIEWS"
 OK=true
 if [ "$FINAL_SCAN" != "enabled" ]; then echo "❌ Secret scanning not enabled" >&2; OK=false; fi
 if [ "$FINAL_PUSH" != "enabled" ]; then echo "❌ Push protection not enabled" >&2; OK=false; fi
-if [ "$FINAL_REVIEWS" != "1" ]; then echo "❌ Review count not set to 1" >&2; OK=false; fi
+if [ "$FINAL_REVIEWS" != "0" ]; then echo "❌ Review count not set to 0" >&2; OK=false; fi
 
 if [ "$OK" = true ]; then
   echo "✅ Repo secured! Check https://github.com/philmehew/ali/security"
