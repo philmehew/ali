@@ -413,6 +413,24 @@ ali/
 └── Makefile
 ```
 
+## GitHub Security
+
+The `github-secure.sh` script configures repository security settings and branch protection using the [GitHub CLI](https://cli.github.com/) (`gh`). It requires `gh` to be authenticated with repo admin access.
+
+**What it configures:**
+
+- **Secret scanning** — detects secrets committed to the repo
+- **Push protection** — blocks pushes containing detected secrets
+- **Branch protection** — requires 1 approval, linear history, conversation resolution; enforces admin restrictions; disables force pushes and deletions
+
+**Usage:**
+
+```bash
+./github-secure.sh
+```
+
+The script checks current settings before making changes, only enabling what isn't already active. It verifies all settings at the end and exits with an error if anything didn't apply correctly.
+
 ## Dependencies
 
 | Package | Purpose |
