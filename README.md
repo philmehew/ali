@@ -51,7 +51,7 @@ make build
 sudo make install   # copies to /usr/local/bin/ali
 ```
 
-Requires Go 1.22+ (go.mod tracks the installed version).
+Requires Go 1.24+ (go.mod tracks the installed version).
 
 ### Add to PATH
 
@@ -415,6 +415,73 @@ The `github-secure.sh` script configures repository security settings and branch
 ```
 
 The script checks current settings before making changes, only enabling what isn't already active. It verifies all settings at the end and exits with an error if anything didn't apply correctly.
+
+## Development & Release
+
+### Development workflow
+
+Branch protection is enforced on `main` — all changes must go through a pull request.
+
+```bash
+# 1. Create a branch
+git checkout -b chore/my-change
+
+# 2. Make changes, then test locally
+make test
+make build
+
+# 3. Commit and push the branch
+git add -A
+git commit -m "chore: description of change"
+git push -u origin chore/my-change
+
+# 4. Open a pull request
+gh pr create
+
+# 5. Merge the PR via GitHub, then pull the merged state
+git checkout main
+git pull
+
+# 6. Clean up the local branch
+git branch -d chore/my-change
+```
+
+CI runs `go test` and `go vet` automatically on pull requests.
+
+### Releasing
+
+Releases are built automatically by [GoReleaser](https://goreleaser.com/) when a version tag is pushed to `main`. Tags must be created **after** the PR is merged — otherwise the tag points to the branch commit, not main.
+
+```bash
+# 1. Make sure main is up to date after a PR merge
+git checkout main
+git pull
+
+# 2. Tag the release
+git tag v1.1.0
+
+# 3. Push the tag — this triggers the release pipeline
+git push origin v1.1.0
+```
+
+The release pipeline:
+
+1. Builds binaries for linux/darwin/windows on amd64 and arm64
+2. Packages them as `.tar.gz` (`.zip` for Windows)
+3. Generates SHA256 checksums
+4. Creates a GitHub Release with all artefacts attached
+
+No GitHub secrets configuration is needed — the default `GITHUB_TOKEN` handles release creation.
+
+To have GitHub automatically delete remote branches on merge, enable **Settings > General > Pull Requests > Automatically delete head branches**.
+
+### Release artefacts
+
+| OS | Arch | Format |
+|----|------|--------|
+| Linux | amd64, arm64 | `.tar.gz` |
+| macOS | amd64, arm64 | `.tar.gz` |
+| Windows | amd64, arm64 | `.zip` |
 
 ## Dependencies
 
