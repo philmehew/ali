@@ -38,6 +38,8 @@
 
 A lightweight CLI tool for managing and executing parametric command-line snippets. A structured alternative to shell aliases and history -- no sourcing, no `.bashrc` edits.
 
+**macOS and Linux only.** ali relies on `/bin/sh` for command execution and Unix shell conventions — it does not run on Windows.
+
 ## Install
 
 ```bash
@@ -442,8 +444,9 @@ gh pr create
 git checkout main
 git pull
 
-# 6. Clean up the local branch
-git branch -d chore/my-change
+# 6. Clean up the branch
+git branch -d chore/my-change               # local
+git push origin --delete chore/my-change     # remote
 ```
 
 CI runs `go test` and `go vet` automatically on pull requests.
@@ -466,8 +469,8 @@ git push origin v1.1.0
 
 The release pipeline:
 
-1. Builds binaries for linux/darwin/windows on amd64 and arm64
-2. Packages them as `.tar.gz` (`.zip` for Windows)
+1. Builds binaries for linux/darwin on amd64 and arm64
+2. Packages them as `.tar.gz`
 3. Generates SHA256 checksums
 4. Creates a GitHub Release with all artefacts attached
 
@@ -481,7 +484,6 @@ To have GitHub automatically delete remote branches on merge, enable **Settings 
 |----|------|--------|
 | Linux | amd64, arm64 | `.tar.gz` |
 | macOS | amd64, arm64 | `.tar.gz` |
-| Windows | amd64, arm64 | `.zip` |
 
 ## Dependencies
 
