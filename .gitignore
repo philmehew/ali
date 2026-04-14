@@ -1,5 +1,6 @@
 # Build output
 /ali
+dist/
 *.exe
 *.exe~
 *.dll
