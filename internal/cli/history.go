@@ -47,7 +47,7 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 			}
 
 			if len(commands) == 0 {
-				fmt.Println("No commands found in history.")
+				outputln("No commands found in history.")
 				return nil
 			}
 
@@ -88,11 +88,11 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 			})
 
 			if len(candidates) == 0 {
-				fmt.Println("All frequent commands are already in ali or ignored.")
+				outputln("All frequent commands are already in ali or ignored.")
 				return nil
 			}
 
-			fmt.Printf("Scanning last %d lines of %s...\n\n", lines, histPath)
+			outputf("Scanning last %d lines of %s...\n\n", lines, histPath)
 
 			reader := bufio.NewReader(os.Stdin)
 			added := 0
@@ -101,8 +101,8 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 
 			for {
 				// Display the current window of up to newCount candidates.
-				fmt.Println("Top commands not yet in ali:")
-				fmt.Println()
+				outputln("Top commands not yet in ali:")
+				outputln()
 
 				end := cursor + newCount
 				if end > len(candidates) {
@@ -110,17 +110,17 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 				}
 
 				if cursor >= len(candidates) {
-					fmt.Println("No more commands in history.")
+					outputln("No more commands in history.")
 					break
 				}
 
 				window := candidates[cursor:end]
 				for i, cf := range window {
-					fmt.Printf("  %2d.  %-40s (%d times)\n", i+1, cf.command, cf.count)
+					outputf("  %2d.  %-40s (%d times)\n", i+1, cf.command, cf.count)
 				}
 
-				fmt.Println()
-				fmt.Print("Enter number to add, 'i <num>' to ignore, or 'q' to quit: ")
+				outputln()
+				output("Enter number to add, 'i <num>' to ignore, or 'q' to quit: ")
 
 				input, _ := reader.ReadString('\n')
 				input = strings.TrimSpace(input)
@@ -138,7 +138,7 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 					numStr := strings.TrimSpace(input[2:])
 					num := 0
 					if _, err := fmt.Sscanf(numStr, "%d", &num); err != nil || num < 1 || num > len(window) {
-						fmt.Println("Invalid number.")
+						outputln("Invalid number.")
 						continue
 					}
 					cmd := window[num-1].command
@@ -147,21 +147,21 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 					// Remove from candidates.
 					candidates = removeFromCandidates(candidates, cursor+num-1)
 					ignored++
-					fmt.Printf("Ignored %q\n\n", cmd)
+					outputf("Ignored %q\n\n", cmd)
 					continue
 				}
 
 				// Parse number to add.
 				num := 0
 				if _, err := fmt.Sscanf(input, "%d", &num); err != nil || num < 1 || num > len(window) {
-					fmt.Println("Enter a number, 'i <num>', or 'q'.")
+					outputln("Enter a number, 'i <num>', or 'q'.")
 					continue
 				}
 
 				cf := window[num-1]
 				suggested := suggestAlias(cf.command, existingNames)
 
-				fmt.Printf("Add %q as [%s]? (y/e): ", cf.command, suggested)
+				outputf("Add %q as [%s]? (y/e): ", cf.command, suggested)
 				confirm, _ := reader.ReadString('\n')
 				confirm = strings.TrimSpace(strings.ToLower(confirm))
 
@@ -170,19 +170,19 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 				case "y", "yes", "":
 					alias = suggested
 				case "e", "edit":
-					fmt.Print("Alias name: ")
+					output("Alias name: ")
 					nameInput, _ := reader.ReadString('\n')
 					alias = strings.TrimSpace(nameInput)
 					if alias == "" {
-						fmt.Println("Skipped (no name provided).")
+						outputln("Skipped (no name provided).")
 						continue
 					}
 					if existingNames[alias] {
-						fmt.Printf("Alias %q already exists. Skipped.\n\n", alias)
+						outputf("Alias %q already exists. Skipped.\n\n", alias)
 						continue
 					}
 				default:
-					fmt.Println("Skipped.")
+					outputln("Skipped.")
 					continue
 				}
 
@@ -195,7 +195,7 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 				// Remove from candidates so the next one fills the gap.
 				candidates = removeFromCandidates(candidates, cursor+num-1)
 				added++
-				fmt.Printf("Added function %q\n\n", alias)
+				outputf("Added function %q\n\n", alias)
 			}
 
 			// Save if anything changed.
@@ -204,13 +204,13 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 					return fmt.Errorf("could not save config: %w", err)
 				}
 				if added > 0 {
-					fmt.Printf("Added %d function(s).\n", added)
+					outputf("Added %d function(s).\n", added)
 				}
 				if ignored > 0 {
-					fmt.Printf("Ignored %d command(s).\n", ignored)
+					outputf("Ignored %d command(s).\n", ignored)
 				}
 			} else {
-				fmt.Println("No changes made.")
+				outputln("No changes made.")
 			}
 
 			return nil

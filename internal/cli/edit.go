@@ -83,7 +83,7 @@ func editFunction(cfg *models.AliConfig, idx int) error {
 
 	editCmd := exec.Command(editor, tmpName) //nolint:gosec // G204: editor from $EDITOR is intentional.
 	editCmd.Stdin = os.Stdin
-	editCmd.Stdout = os.Stdout
+	editCmd.Stdout = displayOut
 	editCmd.Stderr = os.Stderr
 
 	if err := editCmd.Run(); err != nil {
@@ -118,7 +118,7 @@ func editFunction(cfg *models.AliConfig, idx int) error {
 		return fmt.Errorf("could not save config: %w", err)
 	}
 
-	fmt.Printf("Updated function %q\n", editedFn.Name)
+	outputf("Updated function %q\n", editedFn.Name)
 	return nil
 }
 
@@ -131,7 +131,7 @@ func editIgnored() error {
 	}
 
 	if len(cfg.Ignore) == 0 {
-		fmt.Println("No ignored commands.")
+		outputln("No ignored commands.")
 		return nil
 	}
 
@@ -163,7 +163,7 @@ func editIgnored() error {
 
 	editCmd := exec.Command(editor, tmpName) //nolint:gosec // G204: editor from $EDITOR is intentional.
 	editCmd.Stdin = os.Stdin
-	editCmd.Stdout = os.Stdout
+	editCmd.Stdout = displayOut
 	editCmd.Stderr = os.Stderr
 
 	if err := editCmd.Run(); err != nil {
@@ -187,6 +187,6 @@ func editIgnored() error {
 		return fmt.Errorf("could not save config: %w", err)
 	}
 
-	fmt.Printf("Updated ignore list (%d command(s))\n", len(cfg.Ignore))
+	outputf("Updated ignore list (%d command(s))\n", len(cfg.Ignore))
 	return nil
 }

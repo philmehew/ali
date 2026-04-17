@@ -1,11 +1,10 @@
-// Package execution handles parameter substitution and shell command execution
+// Package execution handles parameter substitution and command formatting
 // for ali function bodies.
 package execution
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -80,10 +79,10 @@ func shellArgEscape(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
-// Execute runs the resolved command through /bin/sh.
-func Execute(resolved *ResolvedCommand) error {
+// CommandString returns the fully resolved command string, with extra
+// arguments appended and shell-escaped, ready for display or pasting.
+func CommandString(resolved *ResolvedCommand) string {
 	cmdStr := resolved.Command
-
 	if len(resolved.Extras) > 0 {
 		parts := []string{cmdStr}
 		for _, e := range resolved.Extras {
@@ -91,20 +90,15 @@ func Execute(resolved *ResolvedCommand) error {
 		}
 		cmdStr = strings.Join(parts, " ")
 	}
+	return cmdStr
+}
 
-	//nolint:gosec // G204: subprocess with variable is intentional — ali executes user-defined commands.
-	cmd := exec.Command("/bin/sh", "-c", cmdStr)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		return fmt.Errorf("command failed: %w", err)
-	}
-
-	return nil
+// PasteCommand writes the resolved command to stdout and exits.
+// In shell integration mode (stdout is captured by the wrapper),
+// this outputs the command for the wrapper to paste into the
+// shell's input buffer. Without the wrapper, the command is
+// simply displayed for the user.
+func PasteCommand(resolved *ResolvedCommand) {
+	_, _ = fmt.Fprintln(os.Stdout, CommandString(resolved))
+	os.Exit(0)
 }
