@@ -116,6 +116,44 @@ func TestSubstitute_Ordering(t *testing.T) {
 	}
 }
 
+func TestCommandString(t *testing.T) {
+	tests := []struct {
+		name     string
+		resolved *ResolvedCommand
+		want     string
+	}{
+		{
+			name:     "simple command",
+			resolved: &ResolvedCommand{Command: "git log --oneline -n 10"},
+			want:     "git log --oneline -n 10",
+		},
+		{
+			name:     "with extras",
+			resolved: &ResolvedCommand{Command: "echo hello", Extras: []string{"world", "foo bar"}},
+			want:     "echo hello 'world' 'foo bar'",
+		},
+		{
+			name:     "with special chars in extras",
+			resolved: &ResolvedCommand{Command: "echo", Extras: []string{"it's"}},
+			want:     "echo 'it'\\''s'",
+		},
+		{
+			name:     "no extras",
+			resolved: &ResolvedCommand{Command: "git status"},
+			want:     "git status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CommandString(tt.resolved)
+			if got != tt.want {
+				t.Errorf("CommandString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShellArgEscape(t *testing.T) {
 	tests := []struct {
 		input    string

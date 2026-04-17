@@ -36,7 +36,7 @@
                     -.---..--... .. ......#+#  .
 ```
 
-A lightweight CLI tool for managing and executing parametric command-line snippets. A structured alternative to shell aliases and history -- no sourcing, no `.bashrc` edits.
+A lightweight CLI tool for managing parametric command-line snippets. A structured alternative to shell aliases and history — resolved commands are pasted into your shell for editing before execution.
 
 **macOS and Linux only.** ali relies on `/bin/sh` for command execution and Unix shell conventions — it does not run on Windows.
 
@@ -55,26 +55,24 @@ sudo make install   # copies to /usr/local/bin/ali
 
 Requires Go 1.24+ (go.mod tracks the installed version).
 
-### Add to PATH
+### Shell integration
 
-Run `ali init` to output the shell configuration for your system. It auto-detects your shell from `$SHELL`, or you can specify one explicitly:
+Run `ali init --install` to add shell integration to your rc file. It auto-detects your shell from `$SHELL`, or you can specify one explicitly:
 
 ```bash
-ali init        # auto-detect
-ali init bash   # bash
-ali init zsh    # zsh
-ali init fish   # fish
+ali init --install        # auto-detect shell and add to rc file
+ali init --install zsh   # add zsh setup to ~/.zshrc
+ali init --install bash  # add bash setup to ~/.bashrc
+ali init --install fish  # add fish setup to config.fish
 ```
 
-It prints an `export PATH=...` line, plus the commands to persist it. Follow the two steps it outputs — add the export to your shell profile, then reload:
+Then reload your shell:
 
 ```bash
-# Step 1: add to your profile (example for zsh)
-echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc
-
-# Step 2: reload
 source ~/.zshrc
 ```
+
+This adds an `eval` line to your rc file that sets up PATH and a shell wrapper function on every startup. The wrapper pastes resolved commands into your input line for editing before execution — so `ali glog 20` puts `git log --oneline -n 20` on your command line, ready to press Enter.
 
 ## Quick Start
 
@@ -82,7 +80,7 @@ source ~/.zshrc
 # Add a function
 ali add glog "git log --oneline -n \$1" -d "Pretty git log" -D "10"
 
-# Execute it (uses default value "10")
+# Run it (uses default value "10")
 ali glog
 
 # Override the default
@@ -102,7 +100,7 @@ ali remove glog
 
 ### `ali <name> [params...]`
 
-Execute a stored function by name. Any parameters override defaults left-to-right.
+Resolve a stored function and paste it into your command line. Any parameters override defaults left-to-right.
 
 ```bash
 ali glog          # uses default for $1
@@ -154,15 +152,14 @@ $ ali list
    2.  dcup       docker compose up -d         Docker compose up
    3.  dcdn       docker compose down          Docker compose down
 
-Enter number to execute, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: 1
-...output of git log --oneline -n 10...
+Enter number to resolve, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: 1
 
 $ ali list
    1.  glog       git log --oneline -n $1     Pretty git log
    2.  dcup       docker compose up -d         Docker compose up
    3.  dcdn       docker compose down          Docker compose down
 
-Enter number to execute, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: r 2
+Enter number to resolve, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: r 2
 Removed function "dcup"
 
    1.  glog       git log --oneline -n $1     Pretty git log
@@ -182,7 +179,7 @@ Removed "nslookup" from ignore list
 Enter 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: q
 ```
 
-- **Number** — execute that function
+- **Number** — resolve and paste that function
 - **`e <num>`** — edit that function in `$EDITOR`
 - **`r <num>`** — remove that function (or ignored command)
 - **`q`** — quit
@@ -247,7 +244,7 @@ ali edit --ignored   # edit the ignore list
 
 ### `ali init [shell]`
 
-Output shell configuration to add ali to your PATH. Auto-detects your shell from `$SHELL` if no argument is given.
+Output shell integration code for ali. This is called by the `eval` line in your rc file (set up by `ali init --install`). It auto-detects your shell from `$SHELL` if no argument is given.
 
 ```bash
 ali init        # auto-detect from $SHELL
@@ -256,17 +253,11 @@ ali init zsh
 ali init fish
 ```
 
-The output includes the `export PATH=...` line and step-by-step instructions to persist it:
+To add the eval line to your rc file instead, use `--install`:
 
-```
-# ali v1.0.0: add to your shell profile (~/.zshrc):
-export PATH="/Users/you/go/bin:$PATH"
-
-# Step 1: Add to your profile:
-echo 'export PATH="/Users/you/go/bin:$PATH"' >> ~/.zshrc
-
-# Step 2: Reload your profile:
-source ~/.zshrc
+```bash
+ali init --install        # auto-detect and add to rc file
+ali init --install zsh    # add to ~/.zshrc
 ```
 
 ### `ali version`
@@ -307,7 +298,7 @@ Arguments beyond the highest `$N` placeholder are appended to the command with p
 
 ```bash
 ali add find "find . -name \$1" -D "*.go"
-ali find "*.go" -type f   # runs: find . -name "*.go" '-type' 'f'
+ali find "*.go" -type f   # resolves: find . -name "*.go" '-type' 'f'
 ```
 
 ### Shell features
@@ -318,6 +309,8 @@ The function body is executed through `/bin/sh -c`, so pipes, redirects, subshel
 ali add count "git log --oneline | wc -l"
 ali add status "echo \$1 && echo \$2"
 ```
+
+Resolved commands are pasted into your shell's input line for editing before execution — not executed directly. This requires shell integration (set up via `ali init --install`).
 
 ## Configuration
 
@@ -381,7 +374,7 @@ ali/
 │   │   ├── config.go            # Load, Save, Path, FindFunction
 │   │   └── config_test.go
 │   ├── execution/
-│   │   ├── execute.go           # Parameter substitution + shell execution
+│   │   ├── execute.go           # Parameter substitution + command output
 │   │   └── execute_test.go
 │   ├── version/
 │   │   └── version.go           # Version constant (injected via -ldflags)

@@ -44,6 +44,6 @@ func removeFunction(cfg *models.AliConfig, idx int) error {
 		return fmt.Errorf("could not save config: %w", err)
 	}
 
-	fmt.Printf("Removed function %q\n", name)
+	outputf("Removed function %q\n", name)
 	return nil
 }
