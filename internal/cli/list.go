@@ -45,7 +45,7 @@ Examples:
 			}
 
 			if len(cfg.Functions) == 0 {
-				fmt.Println("No functions defined. Use 'ali add' to create one.")
+				outputln("No functions defined. Use 'ali add' to create one.")
 				return nil
 			}
 
@@ -72,16 +72,16 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 
 		if len(functions) == 0 {
 			if len(keywords) > 0 {
-				fmt.Printf("No functions matching: %s\n", strings.Join(keywords, " "))
+				outputf("No functions matching: %s\n", strings.Join(keywords, " "))
 			} else {
-				fmt.Println("No functions defined. Use 'ali add' to create one.")
+				outputln("No functions defined. Use 'ali add' to create one.")
 			}
 			return nil
 		}
 
 		printFunctionList(functions)
-		fmt.Println()
-		fmt.Print("Enter number to execute, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: ")
+		outputln()
+		output("Enter number to execute, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: ")
 
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
@@ -99,7 +99,7 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 			numStr := strings.TrimSpace(input[2:])
 			num := 0
 			if _, err := fmt.Sscanf(numStr, "%d", &num); err != nil || num < 1 || num > len(functions) {
-				fmt.Println("Invalid number.")
+				outputln("Invalid number.")
 				continue
 			}
 			fn := functions[num-1]
@@ -107,7 +107,7 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 			if err := editFunction(cfg, idx); err != nil {
 				return err
 			}
-			fmt.Println()
+			outputln()
 			continue
 		}
 
@@ -116,7 +116,7 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 			numStr := strings.TrimSpace(input[2:])
 			num := 0
 			if _, err := fmt.Sscanf(numStr, "%d", &num); err != nil || num < 1 || num > len(functions) {
-				fmt.Println("Invalid number.")
+				outputln("Invalid number.")
 				continue
 			}
 			fn := functions[num-1]
@@ -124,14 +124,14 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 			if err := removeFunction(cfg, idx); err != nil {
 				return err
 			}
-			fmt.Println()
+			outputln()
 			continue
 		}
 
 		// Parse number to execute.
 		num := 0
 		if _, err := fmt.Sscanf(input, "%d", &num); err != nil || num < 1 || num > len(functions) {
-			fmt.Println("Enter a number, 'e <num>', 'r <num>', or 'q'.")
+			outputln("Enter a number, 'e <num>', 'r <num>', or 'q'.")
 			continue
 		}
 
@@ -139,10 +139,10 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 		idx := config.FindFunctionIndex(cfg, fn.Name)
 		resolved, err := execution.Resolve(&cfg.Functions[idx], nil)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			outputf("Error: %v\n", err)
 			continue
 		}
-		return execution.Execute(resolved)
+		execution.PasteCommand(resolved)
 	}
 
 	return nil
@@ -150,7 +150,7 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 
 // printFunctionList displays a numbered list of functions with name, body, and description.
 func printFunctionList(functions []models.AliFunction) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(displayOut, 0, 0, 2, ' ', 0)
 	for i, fn := range functions {
 		if fn.Description != "" {
 			_, _ = fmt.Fprintf(w, "  %2d.\t%s\t%s\t%s\n", i+1, fn.Name, fn.Body, fn.Description)
@@ -165,7 +165,7 @@ func printFunctionList(functions []models.AliFunction) {
 // for edit/remove actions in a loop.
 func listIgnoredInteractive(cfg *models.AliConfig) error {
 	if len(cfg.Ignore) == 0 {
-		fmt.Println("No ignored commands.")
+		outputln("No ignored commands.")
 		return nil
 	}
 
@@ -173,13 +173,13 @@ func listIgnoredInteractive(cfg *models.AliConfig) error {
 
 	for {
 		if len(cfg.Ignore) == 0 {
-			fmt.Println("No ignored commands.")
+			outputln("No ignored commands.")
 			return nil
 		}
 
 		printIgnoredList(cfg.Ignore)
-		fmt.Println()
-		fmt.Print("Enter 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: ")
+		outputln()
+		output("Enter 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: ")
 
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
@@ -197,7 +197,7 @@ func listIgnoredInteractive(cfg *models.AliConfig) error {
 			numStr := strings.TrimSpace(input[2:])
 			num := 0
 			if _, err := fmt.Sscanf(numStr, "%d", &num); err != nil || num < 1 || num > len(cfg.Ignore) {
-				fmt.Println("Invalid number.")
+				outputln("Invalid number.")
 				continue
 			}
 			if err := editIgnored(); err != nil {
@@ -209,7 +209,7 @@ func listIgnoredInteractive(cfg *models.AliConfig) error {
 			if err != nil {
 				return fmt.Errorf("could not reload config: %w", err)
 			}
-			fmt.Println()
+			outputln()
 			continue
 		}
 
@@ -218,7 +218,7 @@ func listIgnoredInteractive(cfg *models.AliConfig) error {
 			numStr := strings.TrimSpace(input[2:])
 			num := 0
 			if _, err := fmt.Sscanf(numStr, "%d", &num); err != nil || num < 1 || num > len(cfg.Ignore) {
-				fmt.Println("Invalid number.")
+				outputln("Invalid number.")
 				continue
 			}
 			cmd := cfg.Ignore[num-1]
@@ -226,18 +226,18 @@ func listIgnoredInteractive(cfg *models.AliConfig) error {
 			if err := config.Save(cfg); err != nil {
 				return fmt.Errorf("could not save config: %w", err)
 			}
-			fmt.Printf("Removed %q from ignore list\n\n", cmd)
+			outputf("Removed %q from ignore list\n\n", cmd)
 			continue
 		}
 
-		fmt.Println("Enter 'e <num>', 'r <num>', or 'q'.")
+		outputln("Enter 'e <num>', 'r <num>', or 'q'.")
 		// Reload config after editing.
 		var err error
 		cfg, err = config.Load()
 		if err != nil {
 			return fmt.Errorf("could not reload config: %w", err)
 		}
-		fmt.Println()
+		outputln()
 	}
 
 	return nil
@@ -245,7 +245,7 @@ func listIgnoredInteractive(cfg *models.AliConfig) error {
 
 // printIgnoredList displays a numbered list of ignored commands.
 func printIgnoredList(ignore []string) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(displayOut, 0, 0, 2, ' ', 0)
 	for i, cmd := range ignore {
 		_, _ = fmt.Fprintf(w, "  %2d.\t%s\n", i+1, cmd)
 	}
