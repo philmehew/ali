@@ -12,7 +12,7 @@ import (
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run <name> [params...]",
-		Short: "Execute a stored function",
+		Short: "Resolve and print a stored function",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
@@ -33,7 +33,8 @@ func newRunCmd() *cobra.Command {
 				return err
 			}
 
-			return execution.Execute(resolved)
+			execution.PasteCommand(resolved)
+			return nil // unreachable — PasteCommand calls os.Exit
 		},
 	}
 

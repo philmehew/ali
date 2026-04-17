@@ -49,7 +49,7 @@ func newAddCmd() *cobra.Command {
 				return fmt.Errorf("could not save config: %w", err)
 			}
 
-			fmt.Printf("Added function %q\n", name)
+			outputf("Added function %q\n", name)
 			return nil
 		},
 	}
