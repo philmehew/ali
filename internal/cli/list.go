@@ -18,7 +18,8 @@ func newListCmd() *cobra.Command {
 	var ignored bool
 
 	cmd := &cobra.Command{
-		Use:   "list [keywords...]",
+		Use:     "list [keywords...]",
+		Aliases: []string{"ls"},
 		Short: "List stored functions, optionally filtered by keywords",
 		Long: `List all stored functions, or filter by keywords.
 
@@ -81,7 +82,7 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 
 		printFunctionList(functions)
 		outputln()
-		output("Enter number to execute, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: ")
+		output("Enter number to execute, 'e <num>' to edit, 'm <from> <to>' to move, 'r <num>' to remove, or 'q' to quit: ")
 
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
@@ -111,6 +112,33 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 			continue
 		}
 
+		// Parse "m <from> <to>" to move.
+		if strings.HasPrefix(strings.ToLower(input), "m ") {
+			parts := strings.Fields(input[2:])
+			if len(parts) != 2 {
+				outputln("Usage: m <from> <to>")
+				continue
+			}
+			fromNum, toNum := 0, 0
+			if _, err := fmt.Sscanf(parts[0], "%d", &fromNum); err != nil || fromNum < 1 || fromNum > len(functions) {
+				outputln("Invalid 'from' number.")
+				continue
+			}
+			if _, err := fmt.Sscanf(parts[1], "%d", &toNum); err != nil || toNum < 1 || toNum > len(functions) {
+				outputln("Invalid 'to' number.")
+				continue
+			}
+			fromIdx := config.FindFunctionIndex(cfg, functions[fromNum-1].Name)
+			toIdx := toNum - 1
+			name := functions[fromNum-1].Name
+			config.MoveFunction(cfg, fromIdx, toIdx)
+			if err := config.Save(cfg); err != nil {
+				return fmt.Errorf("could not save config: %w", err)
+			}
+			outputf("Moved %q to position %d\n\n", name, toNum)
+			continue
+		}
+
 		// Parse "r <num>" to remove.
 		if strings.HasPrefix(strings.ToLower(input), "r ") {
 			numStr := strings.TrimSpace(input[2:])
@@ -131,7 +159,7 @@ func listFunctionsInteractive(cfg *models.AliConfig, keywords []string) error {
 		// Parse number to execute.
 		num := 0
 		if _, err := fmt.Sscanf(input, "%d", &num); err != nil || num < 1 || num > len(functions) {
-			outputln("Enter a number, 'e <num>', 'r <num>', or 'q'.")
+			outputln("Enter a number, 'e <num>', 'm <from> <to>', 'r <num>', or 'q'.")
 			continue
 		}
 
