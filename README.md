@@ -286,13 +286,16 @@ ali init --install        # auto-detect and add to rc file
 ali init --install zsh    # add to ~/.zshrc
 ```
 
-### `ali version`
+### `ali --version`
 
 Print the current version.
 
 ```bash
-ali version
-v1.2.0
+ali --version
+ali v1.2.0
+commit: abc1234
+built:  2025-01-01T00:00:00Z
+author: Your Name
 ```
 
 ## Parameters
@@ -410,7 +413,6 @@ ali/
 │       ├── move.go              # ali move (alias: mv)
 │       ├── history.go           # ali history
 │       ├── init.go              # ali init
-│       ├── version.go           # ali version
 │       ├── list.go              # ali list
 │       ├── remove.go            # ali remove
 │       ├── edit.go              # ali edit

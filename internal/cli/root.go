@@ -6,6 +6,8 @@ import (
 
 	"github.com/philmehew/ali/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/philmehew/ali/internal/version"
 )
 
 const aliLogo = `
@@ -54,7 +56,10 @@ func NewRootCmd() *cobra.Command {
 		Use:   "ali",
 		Short: "Manage and execute parametric command-line snippets",
 		Long:  aliLogo + fmt.Sprintf("\n\nConfig file:\n  %s", configPath),
+		Version: fmt.Sprintf("ali %s\ncommit: %s\nbuilt:  %s\nauthor: %s", version.Version, version.Commit, version.BuildDate, version.Author),
 	}
+
+	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
 	// Route Cobra's help/usage output through displayOut so it goes to
 	// stderr when stdout is captured by the shell wrapper.
@@ -68,7 +73,6 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newRemoveCmd())
 	rootCmd.AddCommand(newEditCmd())
 	rootCmd.AddCommand(newRunCmd())
-	rootCmd.AddCommand(newVersionCmd())
 
 	// Hide the auto-generated completion command from help output.
 	rootCmd.CompletionOptions.HiddenDefaultCmd = true
