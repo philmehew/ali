@@ -111,3 +111,10 @@ func FindFunctionIndex(cfg *models.AliConfig, name string) int {
 	}
 	return -1
 }
+
+// MoveFunction moves the function at fromIdx to toIdx (both 0-based) and saves.
+func MoveFunction(cfg *models.AliConfig, fromIdx, toIdx int) {
+	fn := cfg.Functions[fromIdx]
+	cfg.Functions = append(cfg.Functions[:fromIdx], cfg.Functions[fromIdx+1:]...)
+	cfg.Functions = append(cfg.Functions[:toIdx], append([]models.AliFunction{fn}, cfg.Functions[toIdx:]...)...)
+}

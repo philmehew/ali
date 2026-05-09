@@ -2,11 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/philmehew/ali/internal/config"
 	"github.com/philmehew/ali/internal/execution"
+	"github.com/philmehew/ali/internal/models"
 )
 
 func newRunCmd() *cobra.Command {
@@ -15,7 +17,7 @@ func newRunCmd() *cobra.Command {
 		Short: "Resolve and print a stored function",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			name := args[0]
+			arg := args[0]
 			params := args[1:]
 
 			cfg, err := config.Load()
@@ -23,9 +25,9 @@ func newRunCmd() *cobra.Command {
 				return fmt.Errorf("could not load config: %w", err)
 			}
 
-			fn := config.FindFunction(cfg, name)
+			fn := resolveFunction(cfg, arg)
 			if fn == nil {
-				return fmt.Errorf("function %q not found", name)
+				return fmt.Errorf("function %q not found", arg)
 			}
 
 			resolved, err := execution.Resolve(fn, params)
@@ -40,4 +42,16 @@ func newRunCmd() *cobra.Command {
 
 	cmd.Hidden = true
 	return cmd
+}
+
+// resolveFunction looks up a function by name or by 1-based index number.
+func resolveFunction(cfg *models.AliConfig, arg string) *models.AliFunction {
+	// Try as a number first.
+	if num, err := strconv.Atoi(arg); err == nil {
+		if num >= 1 && num <= len(cfg.Functions) {
+			return &cfg.Functions[num-1]
+		}
+		return nil
+	}
+	return config.FindFunction(cfg, arg)
 }

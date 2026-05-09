@@ -89,6 +89,11 @@ ali glog 20
 # List all functions
 ali list
 
+# Run, edit, or remove by number (from ali list)
+ali 3          # run function #3
+ali edit 3     # edit function #3
+ali rm 3       # remove function #3
+
 # Edit in $EDITOR
 ali edit glog
 
@@ -100,11 +105,12 @@ ali remove glog
 
 ### `ali <name> [params...]`
 
-Resolve a stored function and paste it into your command line. Any parameters override defaults left-to-right.
+Resolve a stored function and paste it into your command line. You can also use the number shown in `ali list` instead of a name. Any parameters override defaults left-to-right.
 
 ```bash
 ali glog          # uses default for $1
 ali glog 20       # overrides $1 with "20"
+ali 3             # resolve function #3 from ali list
 ali mygrep TODO . # supplies $1=TODO, $2=.
 ```
 
@@ -112,7 +118,7 @@ This is shorthand for `ali run <name> [params...]`.
 
 ### `ali add <name> <body>`
 
-Add a new function.
+Add a new function. Function names must not be purely numeric (to avoid ambiguity with the numbered references used by `ali list`).
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -131,7 +137,7 @@ ali add hello "echo hello"           # no parameters, no defaults
 ali add glog 'git log --oneline -n $1' -d "Pretty git log" -D "10"
 ```
 
-### `ali list [keywords...]`
+### `ali list [keywords...]` (alias: `ls`)
 
 List stored functions in a numbered interactive list, optionally filtered by keywords. Keywords perform case-insensitive substring matching against the function name, description, and body. Multiple keywords use AND logic — all keywords must match.
 
@@ -152,7 +158,7 @@ $ ali list
    2.  dcup       docker compose up -d         Docker compose up
    3.  dcdn       docker compose down          Docker compose down
 
-Enter number to resolve, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: 1
+Enter number to resolve, 'e <num>' to edit, 'm <from> <to>' to move, 'r <num>' to remove, or 'q' to quit: 1
 
 $ ali list
    1.  glog       git log --oneline -n $1     Pretty git log
@@ -165,7 +171,7 @@ Removed function "dcup"
    1.  glog       git log --oneline -n $1     Pretty git log
    2.  dcdn       docker compose down          Docker compose down
 
-Enter number to execute, 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: q
+Enter number to execute, 'e <num>' to edit, 'm <from> <to>' to move, 'r <num>' to remove, or 'q' to quit: q
 
 $ ali list --ignored
    1.  ls
@@ -181,6 +187,7 @@ Enter 'e <num>' to edit, 'r <num>' to remove, or 'q' to quit: q
 
 - **Number** — resolve and paste that function
 - **`e <num>`** — edit that function in `$EDITOR`
+- **`m <from> <to>`** — move a function to a new position
 - **`r <num>`** — remove that function (or ignored command)
 - **`q`** — quit
 
@@ -225,13 +232,21 @@ Ignored "ssh phil@192.168.0.70"
 
 Supports zsh (`~/.zsh_history`) and bash (`~/.bash_history`), auto-detected from `$SHELL`. Override with the `HISTFILE` environment variable.
 
-### `ali remove <name>`
+### `ali remove <name>` (alias: `rm`)
 
-Delete a stored function.
+Delete a stored function. Accepts a function name or its number from `ali list`.
 
-### `ali edit <name>`
+```bash
+ali remove glog    # remove by name
+ali rm glog        # same thing
+ali rm 3           # remove function #3
+```
 
-Open the function in your `$EDITOR` (defaults to `vi`). The function is written to a temporary YAML file with syntax highlighting. You can edit any field — `name`, `description`, `body`, or `defaults`. If you change the `name` field, the function will be renamed.
+### `ali edit [name]`
+
+Open a stored function in your `$EDITOR` (defaults to `vi`). The function is written to a temporary YAML file with syntax highlighting. You can edit any field — `name`, `description`, `body`, or `defaults`. If you change the `name` field, the function will be renamed.
+
+Without a name, opens the entire config file for direct editing. Accepts a number from `ali list` instead of a name.
 
 | Flag | Description |
 |------|-------------|
@@ -239,7 +254,18 @@ Open the function in your `$EDITOR` (defaults to `vi`). The function is written 
 
 ```bash
 ali edit glog        # edit the glog function
+ali edit 3           # edit function #3
+ali edit              # edit the entire config file
 ali edit --ignored   # edit the ignore list
+```
+
+### `ali move <from> <to>` (alias: `mv`)
+
+Move a function to a new position in the list. Both `<from>` and `<to>` can be a number (from `ali list`) or a function name. `<to>` must be a position number.
+
+```bash
+ali move 5 1      # move function #5 to position #1
+ali mv glog 1     # move glog to position #1
 ```
 
 ### `ali init [shell]`
@@ -266,7 +292,7 @@ Print the current version.
 
 ```bash
 ali version
-v1.0.0
+v1.2.0
 ```
 
 ## Parameters
@@ -352,7 +378,7 @@ ignore:
 - **`defaults`** is optional. If omitted, all parameters are required at runtime.
 - An **empty string** default (`""`) means the parameter defaults to an empty value, not that it is required.
 - **`ignore`** is optional. Commands listed here are excluded from `ali history`. Add entries interactively with `i <num>` or edit the file directly.
-- You can edit this file directly or use `ali edit`.
+- You can edit this file directly, or use `ali edit` (which also validates the file on save).
 
 ### Environment variables
 
@@ -381,6 +407,7 @@ ali/
 │   └── cli/
 │       ├── root.go              # Root command + arg interception
 │       ├── add.go               # ali add
+│       ├── move.go              # ali move (alias: mv)
 │       ├── history.go           # ali history
 │       ├── init.go              # ali init
 │       ├── version.go           # ali version
@@ -454,10 +481,10 @@ git checkout main
 git pull
 
 # 2. Tag the release
-git tag v1.1.0
+git tag v1.2.0
 
 # 3. Push the tag — this triggers the release pipeline
-git push origin v1.1.0
+git push origin v1.2.0
 ```
 
 The release pipeline:
