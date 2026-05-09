@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -16,9 +17,10 @@ func newEditCmd() *cobra.Command {
 	var ignored bool
 
 	cmd := &cobra.Command{
-		Use:   "edit <name>",
+		Use:   "edit [name]",
 		Short: "Edit a stored function in your $EDITOR",
 		Long: `Open a stored function in your $EDITOR (defaults to vi).
+Without a name, opens the entire config file.
 Use --ignored to edit the ignore list instead.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -27,19 +29,27 @@ Use --ignored to edit the ignore list instead.`,
 			}
 
 			if len(args) == 0 {
-				return fmt.Errorf("requires a function name, or use --ignored")
+				return editConfigFile()
 			}
 
-			name := args[0]
+			arg := args[0]
 
 			cfg, err := config.Load()
 			if err != nil {
 				return fmt.Errorf("could not load config: %w", err)
 			}
 
-			idx := config.FindFunctionIndex(cfg, name)
+			// If the arg is a number, resolve it to the function at that index.
+			if num, err := strconv.Atoi(arg); err == nil {
+				if num < 1 || num > len(cfg.Functions) {
+					return fmt.Errorf("number %d out of range (1-%d)", num, len(cfg.Functions))
+				}
+				return editFunction(cfg, num-1)
+			}
+
+			idx := config.FindFunctionIndex(cfg, arg)
 			if idx == -1 {
-				return fmt.Errorf("function %q not found", name)
+				return fmt.Errorf("function %q not found", arg)
 			}
 
 			return editFunction(cfg, idx)
@@ -49,6 +59,45 @@ Use --ignored to edit the ignore list instead.`,
 	cmd.Flags().BoolVar(&ignored, "ignored", false, "edit the ignore list instead of a function")
 
 	return cmd
+}
+
+// editConfigFile opens the entire config file in $EDITOR and validates it on save.
+func editConfigFile() error {
+	path, err := config.Path()
+	if err != nil {
+		return fmt.Errorf("could not determine config path: %w", err)
+	}
+
+	// Ensure the file exists before editing.
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("could not load config: %w", err)
+	}
+	if err := config.Save(cfg); err != nil {
+		return fmt.Errorf("could not save config: %w", err)
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	editCmd := exec.Command(editor, path) //nolint:gosec // G204: editor from $EDITOR is intentional.
+	editCmd.Stdin = os.Stdin
+	editCmd.Stdout = displayOut
+	editCmd.Stderr = os.Stderr
+
+	if err := editCmd.Run(); err != nil {
+		return fmt.Errorf("editor exited with error: %w", err)
+	}
+
+	// Validate the edited file parses correctly.
+	if _, err := config.Load(); err != nil {
+		return fmt.Errorf("edited config is invalid: %w", err)
+	}
+
+	outputf("Updated config %s\n", path)
+	return nil
 }
 
 // editFunction opens the function at idx in $EDITOR, reads it back, and saves.
