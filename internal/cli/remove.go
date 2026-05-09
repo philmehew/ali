@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -11,20 +12,29 @@ import (
 
 func newRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "remove <name>",
+		Use:     "remove <name>",
+		Aliases: []string{"rm"},
 		Short: "Remove a stored function",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			name := args[0]
+			arg := args[0]
 
 			cfg, err := config.Load()
 			if err != nil {
 				return fmt.Errorf("could not load config: %w", err)
 			}
 
-			idx := config.FindFunctionIndex(cfg, name)
+			// If the arg is a number, resolve it to the function at that index.
+			if num, err := strconv.Atoi(arg); err == nil {
+				if num < 1 || num > len(cfg.Functions) {
+					return fmt.Errorf("number %d out of range (1-%d)", num, len(cfg.Functions))
+				}
+				return removeFunction(cfg, num-1)
+			}
+
+			idx := config.FindFunctionIndex(cfg, arg)
 			if idx == -1 {
-				return fmt.Errorf("function %q not found", name)
+				return fmt.Errorf("function %q not found", arg)
 			}
 
 			return removeFunction(cfg, idx)

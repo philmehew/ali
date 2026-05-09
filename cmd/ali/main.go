@@ -11,10 +11,13 @@ import (
 func main() {
 	rootCmd := cli.NewRootCmd()
 
-	// Build the set of known subcommands for argument interception.
+	// Build the set of known subcommands (including aliases) for argument interception.
 	knownSubcommands := make(map[string]bool)
 	for _, cmd := range rootCmd.Commands() {
 		knownSubcommands[cmd.Name()] = true
+		for _, alias := range cmd.Aliases {
+			knownSubcommands[alias] = true
+		}
 	}
 
 	// Intercept args: if the first non-flag arg is not a known subcommand,

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,6 +21,9 @@ func newAddCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
+			if _, err := strconv.Atoi(name); err == nil {
+				return fmt.Errorf("function name %q must not be a number — use a descriptive name instead", name)
+			}
 			body := args[1]
 
 			cfg, err := config.Load()
