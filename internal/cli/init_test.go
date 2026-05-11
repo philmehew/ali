@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,7 +46,7 @@ func TestExecutableDir(t *testing.T) {
 }
 
 func TestInitCmd_Default(t *testing.T) {
-	// ali init (without --install) outputs shell code to stdout.
+	// ali init outputs shell code to stdout.
 	cmd := newInitCmd()
 	buf := &bytes.Buffer{}
 	cmd.SetOut(buf)
@@ -66,74 +65,6 @@ func TestInitCmd_Default(t *testing.T) {
 	}
 	if !strings.Contains(output, "print -z") {
 		t.Errorf("expected zsh wrapper (print -z) in output, got: %q", output)
-	}
-}
-
-func TestInitCmd_InstallFlag(t *testing.T) {
-	// ali init --install appends eval line with full binary path to rc file.
-	t.Setenv("HOME", t.TempDir())
-
-	cmd := newInitCmd()
-	cmd.SetArgs([]string{"--install", "zsh"})
-	cmd.SetOut(io.Discard)
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("init --install cmd: %v", err)
-	}
-
-	home, _ := os.UserHomeDir()
-	rcFile := filepath.Join(home, ".zshrc")
-	data, err := os.ReadFile(rcFile) //nolint:gosec // G304: test file path
-	if err != nil {
-		t.Fatalf("could not read rc file: %v", err)
-	}
-
-	content := string(data)
-	// Should contain the full path to the ali binary, not just "ali".
-	exePath, _ := executablePath()
-	expectedEval := `eval "$(` + exePath + ` init zsh)"`
-	if !strings.Contains(content, expectedEval) {
-		t.Errorf("expected eval line %q in rc file, got: %q", expectedEval, content)
-	}
-}
-
-func TestInitCmd_InstallZsh(t *testing.T) {
-	// Test installShellConfig directly — it uses the full binary path.
-	t.Setenv("HOME", t.TempDir())
-
-	if err := installShellConfig(shellZsh); err != nil {
-		t.Fatalf("installShellConfig: %v", err)
-	}
-
-	home, _ := os.UserHomeDir()
-	rcFile := filepath.Join(home, ".zshrc")
-	data, err := os.ReadFile(rcFile) //nolint:gosec // G304: test file path
-	if err != nil {
-		t.Fatalf("could not read rc file: %v", err)
-	}
-
-	content := string(data)
-	exePath, _ := executablePath()
-	expectedEval := `eval "$(` + exePath + ` init zsh)"`
-	if !strings.Contains(content, expectedEval) {
-		t.Errorf("expected eval line %q in rc file, got: %q", expectedEval, content)
-	}
-	if !strings.Contains(content, "# ali") {
-		t.Errorf("expected # ali marker in rc file, got: %q", content)
-	}
-}
-
-func TestInitCmd_InstallDuplicate(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	// First install
-	if err := installShellConfig(shellZsh); err != nil {
-		t.Fatalf("first install: %v", err)
-	}
-
-	// Second install should detect duplicate and not add again
-	if err := installShellConfig(shellZsh); err != nil {
-		t.Fatalf("second install: %v", err)
 	}
 }
 
