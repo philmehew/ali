@@ -55,6 +55,12 @@ To automatically add this line to your rc file:
 
 	cmd.Flags().BoolVar(&install, "install", false, "append eval line to shell rc file")
 
+	// Init output must always go to stdout — it's captured by eval "$(ali init)"
+	// in rc files, where stdout is a pipe (not a tty). The root command routes
+	// output through displayOut (which becomes stderr when stdout is a pipe),
+	// which is correct for interactive commands but breaks eval capture.
+	cmd.SetOut(os.Stdout)
+
 	return cmd
 }
 
