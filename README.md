@@ -477,16 +477,18 @@ CI runs `go test` and `go vet` automatically on pull requests.
 
 Releases are built automatically by [GoReleaser](https://goreleaser.com/) when a version tag is pushed to `main`. Tags must be created **after** the PR is merged — otherwise the tag points to the branch commit, not main.
 
+Version is derived from the git tag at build time via `-ldflags`. Local builds show `dev` as the version; tagged releases show the tag (e.g. `v1.2.1`). There's no version number to update in the Makefile — just tag and push.
+
 ```bash
 # 1. Make sure main is up to date after a PR merge
 git checkout main
 git pull
 
-# 2. Tag the release
-git tag v1.2.0
+# 2. Tag the release (this also sets the version string)
+git tag v1.2.1
 
 # 3. Push the tag — this triggers the release pipeline
-git push origin v1.2.0
+git push origin v1.2.1
 ```
 
 The release pipeline:
