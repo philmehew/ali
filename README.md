@@ -57,13 +57,13 @@ Requires Go 1.24+ (go.mod tracks the installed version).
 
 ### Shell integration
 
-Run `ali init --install` to add shell integration to your rc file. It auto-detects your shell from `$SHELL`, or you can specify one explicitly:
+Run `ali install` to add shell integration to your rc file. It auto-detects your shell from `$SHELL`, or you can specify one explicitly:
 
 ```bash
-ali init --install        # auto-detect shell and add to rc file
-ali init --install zsh   # add zsh setup to ~/.zshrc
-ali init --install bash  # add bash setup to ~/.bashrc
-ali init --install fish  # add fish setup to config.fish
+ali install        # auto-detect shell and add to rc file
+ali install zsh   # add zsh setup to ~/.zshrc
+ali install bash  # add bash setup to ~/.bashrc
+ali install fish  # add fish setup to config.fish
 ```
 
 Then reload your shell:
@@ -270,7 +270,7 @@ ali mv glog 1     # move glog to position #1
 
 ### `ali init [shell]`
 
-Output shell integration code for ali. This is called by the `eval` line in your rc file (set up by `ali init --install`). It auto-detects your shell from `$SHELL` if no argument is given.
+Output shell integration code for ali. This is called by the `eval` line in your rc file (set up by `ali install`). It auto-detects your shell from `$SHELL` if no argument is given.
 
 ```bash
 ali init        # auto-detect from $SHELL
@@ -279,11 +279,16 @@ ali init zsh
 ali init fish
 ```
 
-To add the eval line to your rc file instead, use `--install`:
+To add the eval line to your rc file automatically, use `ali install` instead.
+
+### `ali install [shell]`
+
+Add the ali eval line to your shell's rc file. It auto-detects your shell from `$SHELL` if no argument is given.
 
 ```bash
-ali init --install        # auto-detect and add to rc file
-ali init --install zsh    # add to ~/.zshrc
+ali install        # auto-detect and add to rc file
+ali install zsh   # add to ~/.zshrc
+ali install bash  # add to ~/.bashrc
 ```
 
 ### `ali --version`
@@ -339,7 +344,7 @@ ali add count "git log --oneline | wc -l"
 ali add status "echo \$1 && echo \$2"
 ```
 
-Resolved commands are pasted into your shell's input line for editing before execution — not executed directly. This requires shell integration (set up via `ali init --install`).
+Resolved commands are pasted into your shell's input line for editing before execution — not executed directly. This requires shell integration (set up via `ali install`).
 
 ## Configuration
 
@@ -413,6 +418,7 @@ ali/
 │       ├── move.go              # ali move (alias: mv)
 │       ├── history.go           # ali history
 │       ├── init.go              # ali init
+│       ├── install.go           # ali install
 │       ├── list.go              # ali list
 │       ├── remove.go            # ali remove
 │       ├── edit.go              # ali edit
