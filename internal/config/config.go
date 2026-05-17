@@ -26,6 +26,15 @@ func Path() (string, error) {
 	return filepath.Join(dir, "ali", "functions.yaml"), nil
 }
 
+// Dir returns the directory containing ali config files (functions.yaml, ai.yaml, etc.).
+func Dir() (string, error) {
+	p, err := Path()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(p), nil
+}
+
 // Load reads the config file. If it doesn't exist, it returns an empty config.
 func Load() (*models.AliConfig, error) {
 	path, err := Path()

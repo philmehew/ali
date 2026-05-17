@@ -9,6 +9,7 @@ LDFLAGS=-ldflags "-s -w -X github.com/philmehew/ali/internal/version.Version=$(V
 
 build:
 	$(GO) build $(LDFLAGS) -o $(BINARY) ./cmd/ali
+	codesign --force --sign - $(BINARY) 2>/dev/null || true
 
 install: build
 	cp $(BINARY) /usr/local/bin/

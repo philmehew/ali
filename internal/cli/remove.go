@@ -14,8 +14,8 @@ func newRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "remove <name>",
 		Aliases: []string{"rm"},
-		Short: "Remove a stored function",
-		Args:  cobra.ExactArgs(1),
+		Short:   "Remove a stored function",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			arg := args[0]
 
