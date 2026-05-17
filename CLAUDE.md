@@ -37,6 +37,8 @@ Linting: `golangci-lint run --config=.golangci.yml ./…` (config in `.golangci.
 
 **`ali edit` flow:** Writes the function YAML to a temp file, launches `$EDITOR` (default `vi`), reads it back, validates, and saves. Supports renaming — checks for name conflicts if the name field changes.
 
+**`ali chat` in-session commands:** All commands use a `/` prefix (e.g., `/file`, `/help`, `/exit`). Bare `exit`/`quit` are treated as regular messages, not commands. `//` at the start escapes to send a literal `/` to the AI. The chat loop dispatches slash commands via `handleChatCommand` in `chat.go`, which returns `true` for `/exit`/`/quit` to break the loop. File context is stored as a single user message at `history[1]` using XML `<file path="...">` tags, detected by `strings.HasPrefix(history[1].Content, "<file")`. Mid-session file/folder additions append to this message or insert a new one at index 1 (shifting conversation turns). `/clear` truncates history to system + file context; `/clear all` truncates to system only. Both reset `trimWarned`. `/model <name>` swaps the model by updating `cfg.Model` and recreating the `ai.Client`. `/window <size>` updates `cfg.ContextWindow` and recalculates the budget. Ctrl+C during streaming closes a `done` channel before cancelling the context — the `onToken` callback checks `done` via a non-blocking `select` to stop printing immediately. Partial output is tracked in a `printed strings.Builder` and kept in history on interrupt.
+
 ## Key Design Decisions
 
 - Commands are subcommands (`ali add`, `ali list`), not flags (`ali --add`). This avoids ambiguity with function names.
