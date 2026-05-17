@@ -213,6 +213,33 @@ func TestInitCmd_WrapperContainsCompletePassthrough(t *testing.T) {
 	}
 }
 
+func TestInitCmd_WrapperContainsChatPassthrough(t *testing.T) {
+	tests := []struct {
+		shell string
+	}{
+		{shellZsh},
+		{shellBash},
+		{shellFish},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.shell, func(t *testing.T) {
+			var wrapper string
+			switch tt.shell {
+			case shellZsh:
+				wrapper = zshWrapper()
+			case shellBash:
+				wrapper = bashWrapper()
+			case shellFish:
+				wrapper = fishWrapper()
+			}
+			if !strings.Contains(wrapper, `"chat"`) && !strings.Contains(wrapper, `= "chat"`) {
+				t.Errorf("expected %q wrapper to contain chat bypass, got: %s", tt.shell, wrapper)
+			}
+		})
+	}
+}
+
 func TestPrintShellConfig_NoCompletionSnippet(t *testing.T) {
 	// Verify ali init no longer includes completion setup (it's in ali install now).
 	tests := []struct {

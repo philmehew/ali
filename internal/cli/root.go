@@ -51,12 +51,12 @@ A structured alternative to shell aliases and history -- no sourcing, no .bashrc
 
 // NewRootCmd creates and returns the root cobra command for ali.
 func NewRootCmd() *cobra.Command {
-	configPath, _ := config.Path()
+	configDir, _ := config.Dir()
 
 	rootCmd := &cobra.Command{
 		Use:     "ali",
 		Short:   "Manage and execute parametric command-line snippets",
-		Long:    aliLogo + fmt.Sprintf("\n\nConfig file:\n  %s", configPath),
+		Long:    aliLogo + fmt.Sprintf("\n\nConfig:\n  %s", configDir),
 		Version: fmt.Sprintf("ali %s\ncommit: %s\nbuilt:  %s\nauthor: %s", version.Version, version.Commit, version.BuildDate, version.Author),
 	}
 
@@ -67,6 +67,8 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.SetOut(displayOut)
 
 	rootCmd.AddCommand(newAddCmd())
+	rootCmd.AddCommand(newAiCmd())
+	rootCmd.AddCommand(newChatCmd())
 	rootCmd.AddCommand(newHistoryCmd())
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newInstallCmd())
