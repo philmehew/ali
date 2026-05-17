@@ -13,9 +13,10 @@ import (
 
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run <name> [params...]",
-		Short: "Resolve and print a stored function",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     "run <name> [params...]",
+		Aliases: []string{"r"},
+		Short:   "Execute a stored function",
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			arg := args[0]
 			params := args[1:]
@@ -40,7 +41,6 @@ func newRunCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Hidden = true
 	cmd.ValidArgsFunction = functionParamsCompletion
 	return cmd
 }

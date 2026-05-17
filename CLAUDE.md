@@ -21,9 +21,9 @@ Linting: `golangci-lint run --config=.golangci.yml ./…` (config in `.golangci.
 
 ## Architecture
 
-**Entry point:** `cmd/ali/main.go` calls `cli.NewRootCmd()` then `cli.InterceptArgs()` to rewrite `os.Args` before Cobra sees them. If the first non-flag arg isn't a known subcommand, `"run"` is inserted — so `ali glog 20` becomes `ali run glog 20`.
+**Entry point:** `cmd/ali/main.go` calls `cli.NewRootCmd()` then `rootCmd.Execute()`. There is no arg interception — function execution requires the explicit `run` (or `r`) subcommand: `ali run glog 20` or `ali r glog 20`.
 
-**Command wiring:** `internal/cli/root.go` registers subcommands and a `--version` flag on the root command. Each subcommand lives in its own file. Aliases: `ls` → list, `rm` → remove, `mv` → move. `run` is hidden — users invoke it implicitly by passing a function name as the first arg. `move` reorders functions by position number or name. `init` outputs eval-able shell configuration for PATH and the wrapper function, auto-detecting from `$SHELL`. `install` appends the eval line to your rc file with the full binary path. `init` uses `cmd.SetOut(os.Stdout)` so its output always goes to stdout (not stderr via displayOut) — this is critical because `eval "$(ali init)"` captures stdout. `install` uses `outputf` for user-facing messages. `--version` (or `-v`) prints the version, commit, build date, and author. `history` scans shell history for frequent commands — presents a rotating numbered list, user adds by number or ignores with `i <num>`, `q` to quit.
+**Command wiring:** `internal/cli/root.go` registers subcommands and a `--version` flag on the root command. Each subcommand lives in its own file. Aliases: `r` → run, `ls` → list, `rm` → remove, `mv` → move. `run` is a visible subcommand for executing stored functions — this avoids namespace collisions between subcommand names and function names. `move` reorders functions by position number or name. `init` outputs eval-able shell configuration for PATH and the wrapper function, auto-detecting from `$SHELL`. `install` appends the eval line to your rc file with the full binary path. `init` uses `cmd.SetOut(os.Stdout)` so its output always goes to stdout (not stderr via displayOut) — this is critical because `eval "$(ali init)"` captures stdout. `install` uses `outputf` for user-facing messages. `--version` (or `-v`) prints the version, commit, build date, and author. `history` scans shell history for frequent commands — presents a rotating numbered list, user adds by number or ignores with `i <num>`, `q` to quit.
 
 **Data flow for command resolution (paste mode):**
 1. `cli/run.go` calls `config.Load()` to read YAML
@@ -41,7 +41,7 @@ Linting: `golangci-lint run --config=.golangci.yml ./…` (config in `.golangci.
 
 ## Key Design Decisions
 
-- Commands are subcommands (`ali add`, `ali list`), not flags (`ali --add`). This avoids ambiguity with function names.
+- Commands are subcommands (`ali add`, `ali list`, `ali run`), not flags (`ali --add`). This avoids ambiguity with function names. Function execution uses the explicit `run` (or `r`) subcommand — `ali run glog 20` or `ali r glog 20` — so function names can never collide with subcommand names.
 - `ali list` accepts optional keywords for filtering — case-insensitive substring match across name/description/body, AND logic for multiple keywords.
 - `$1`..`$N` placeholders are replaced before the shell sees the string, so they don't collide with shell positional parameters.
 - `Defaults: []string{""}` means "default is empty string"; `Defaults: nil` (omitted) means "parameter is required".
