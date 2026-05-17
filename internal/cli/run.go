@@ -41,6 +41,7 @@ func newRunCmd() *cobra.Command {
 	}
 
 	cmd.Hidden = true
+	cmd.ValidArgsFunction = functionParamsCompletion
 	return cmd
 }
 

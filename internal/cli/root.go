@@ -3,6 +3,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/philmehew/ali/internal/config"
 	"github.com/spf13/cobra"
@@ -53,9 +54,9 @@ func NewRootCmd() *cobra.Command {
 	configPath, _ := config.Path()
 
 	rootCmd := &cobra.Command{
-		Use:   "ali",
-		Short: "Manage and execute parametric command-line snippets",
-		Long:  aliLogo + fmt.Sprintf("\n\nConfig file:\n  %s", configPath),
+		Use:     "ali",
+		Short:   "Manage and execute parametric command-line snippets",
+		Long:    aliLogo + fmt.Sprintf("\n\nConfig file:\n  %s", configPath),
 		Version: fmt.Sprintf("ali %s\ncommit: %s\nbuilt:  %s\nauthor: %s", version.Version, version.Commit, version.BuildDate, version.Author),
 	}
 
@@ -78,6 +79,8 @@ func NewRootCmd() *cobra.Command {
 	// Hide the auto-generated completion command from help output.
 	rootCmd.CompletionOptions.HiddenDefaultCmd = true
 
+	rootCmd.ValidArgsFunction = functionNamesCompletion
+
 	return rootCmd
 }
 
@@ -91,9 +94,17 @@ func InterceptArgs(args []string, knownSubcommands map[string]bool) []string {
 
 	// Skip the program name.
 	for i := 1; i < len(args); i++ {
+		if len(args[i]) == 0 {
+			continue
+		}
 		if args[i][0] == '-' {
 			// Skip flag and its value if it takes one.
 			continue
+		}
+		if strings.HasPrefix(args[i], "__") {
+			// Cobra internal commands (e.g. __complete, __completeNoDesc).
+			// Don't rewrite args for completion requests.
+			return args
 		}
 		if knownSubcommands[args[i]] {
 			return args

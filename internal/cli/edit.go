@@ -57,6 +57,7 @@ Use --ignored to edit the ignore list instead.`,
 	}
 
 	cmd.Flags().BoolVar(&ignored, "ignored", false, "edit the ignore list instead of a function")
+	cmd.ValidArgsFunction = functionNamesCompletion
 
 	return cmd
 }
