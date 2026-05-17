@@ -221,3 +221,78 @@ func TestSaveAIConfig_CreatesDirectory(t *testing.T) {
 		t.Error("expected AI config file to be created in nested directory")
 	}
 }
+
+func TestSaveAIConfig_FilePermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ai.yaml")
+	t.Setenv("ALI_AI_CONFIG", configPath)
+
+	cfg := &models.AIConfig{APIKey: "secret-key-12345"}
+	if err := SaveAIConfig(cfg); err != nil {
+		t.Fatalf("SaveAIConfig: %v", err)
+	}
+
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("could not stat AI config file: %v", err)
+	}
+
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("expected AI config file permissions 0600, got %04o", perm)
+	}
+}
+
+func TestSaveAIConfig_DirectoryPermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "subdir", "ai.yaml")
+	t.Setenv("ALI_AI_CONFIG", configPath)
+
+	cfg := &models.AIConfig{APIKey: "test"}
+	if err := SaveAIConfig(cfg); err != nil {
+		t.Fatalf("SaveAIConfig: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(tmpDir, "subdir"))
+	if err != nil {
+		t.Fatalf("could not stat config directory: %v", err)
+	}
+
+	perm := info.Mode().Perm()
+	if perm != 0700 {
+		t.Errorf("expected config directory permissions 0700, got %04o", perm)
+	}
+}
+
+func TestSaveAIConfig_UpdatesExistingFilePermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ai.yaml")
+	t.Setenv("ALI_AI_CONFIG", configPath)
+
+	// Create config with overly permissive permissions.
+	cfg := &models.AIConfig{APIKey: "secret"}
+	if err := SaveAIConfig(cfg); err != nil {
+		t.Fatalf("SaveAIConfig: %v", err)
+	}
+
+	// Manually loosen permissions to simulate someone running chmod 644.
+	if err := os.Chmod(configPath, 0644); err != nil { //nolint:gosec // G302: intentionally loose perms to verify SaveAIConfig resets them
+		t.Fatalf("chmod: %v", err)
+	}
+
+	// Save again — should reset to 0600.
+	cfg.APIKey = "new-secret"
+	if err := SaveAIConfig(cfg); err != nil {
+		t.Fatalf("SaveAIConfig (update): %v", err)
+	}
+
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("could not stat AI config file: %v", err)
+	}
+
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("expected AI config permissions to be reset to 0600, got %04o", perm)
+	}
+}

@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/philmehew/ali/internal/models"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 const (
@@ -63,15 +63,11 @@ func LoadAIConfig() (*models.AIConfig, error) {
 }
 
 // SaveAIConfig writes the AI config to disk atomically.
+// The file is set to 0600 permissions to protect the API key.
 func SaveAIConfig(cfg *models.AIConfig) error {
 	path, err := AIConfigPath()
 	if err != nil {
 		return err
-	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		return fmt.Errorf("could not create config directory: %w", err)
 	}
 
 	data, err := yaml.Marshal(cfg) //nolint:gosec // G117: api_key is a config credential, not a hardcoded secret
@@ -79,29 +75,7 @@ func SaveAIConfig(cfg *models.AIConfig) error {
 		return fmt.Errorf("could not marshal AI config: %w", err)
 	}
 
-	tmp, err := os.CreateTemp(dir, "ali-ai-config-*.tmp")
-	if err != nil {
-		return fmt.Errorf("could not create temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("could not write temp file: %w", err)
-	}
-
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("could not close temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("could not rename temp file: %w", err)
-	}
-
-	return nil
+	return atomicWrite(path, data, 0600)
 }
 
 // DefaultAIPrompt returns the default system prompt used by ali ai.

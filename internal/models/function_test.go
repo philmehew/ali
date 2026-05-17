@@ -3,7 +3,7 @@ package models
 import (
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestYAMLRoundTrip(t *testing.T) {
@@ -106,5 +106,36 @@ func TestNilDefaultsRoundTrip(t *testing.T) {
 
 	if len(loaded.Functions[0].Defaults) != 0 {
 		t.Errorf("expected 0 defaults, got %d", len(loaded.Functions[0].Defaults))
+	}
+}
+
+func TestValidateFunctionName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"valid simple", "glog", false},
+		{"valid underscore", "my_func", false},
+		{"valid hyphen", "a-b", false},
+		{"valid starts underscore", "_private", false},
+		{"valid numbers after first", "glog2", false},
+		{"invalid spaces", "hello world", true},
+		{"invalid semicolon", "a;b", true},
+		{"invalid pipe", "a|b", true},
+		{"invalid exclamation", "name!", true},
+		{"invalid number only", "123", true},
+		{"invalid empty", "", true},
+		{"invalid starts with number", "1abc", true},
+		{"invalid shell injection", "rm -rf", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFunctionName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateFunctionName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
 	}
 }

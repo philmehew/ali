@@ -54,6 +54,13 @@ func installShellConfig(shell string) error {
 		return fmt.Errorf("could not read %s: %w", rcPath, err)
 	}
 
+	// Back up the existing rc file before modifying it.
+	if len(data) > 0 {
+		if err := backupFile(rcPath, data); err != nil {
+			outputf("Warning: could not back up %s: %v\n", rcPath, err)
+		}
+	}
+
 	// Resolve the full path to the ali binary so the eval line works
 	// without ali being on PATH.
 	exePath, err := executablePath()
@@ -63,10 +70,10 @@ func installShellConfig(shell string) error {
 
 	evalLine := fmt.Sprintf("eval \"$(%s init %s)\"", exePath, shell)
 	compLine := completionInstallLine(exePath, shell)
-	newBlock := fmt.Sprintf("\n# ali\n%s\n%s\n", evalLine, compLine)
+	newBlock := fmt.Sprintf("\n# >>> ali >>>\n%s\n%s\n# <<< ali <<<\n", evalLine, compLine)
 
 	// If the rc file already has an ali block, replace it.
-	if len(data) > 0 && strings.Contains(string(data), "# ali") {
+	if len(data) > 0 && (strings.Contains(string(data), "# >>> ali >>>") || strings.Contains(string(data), "# ali")) {
 		updated, replaced := replaceAliBlock(string(data), newBlock)
 		if replaced {
 			if err := os.WriteFile(rcPath, []byte(updated), 0600); err != nil { //nolint:gosec // G304: rcPath is from trusted home directory detection.
@@ -92,8 +99,9 @@ func installShellConfig(shell string) error {
 	return nil
 }
 
-// replaceAliBlock finds the existing ali block in rcContent (a line starting
-// with "# ali" followed by related lines) and replaces it with newBlock.
+// replaceAliBlock finds the existing ali block in rcContent and replaces
+// it with newBlock. It detects both the new-style markers (# >>> ali >>>)
+// and the legacy "# ali" marker for backward compatibility.
 // Returns the updated content and whether a replacement was made.
 func replaceAliBlock(rcContent, newBlock string) (string, bool) {
 	lines := strings.Split(rcContent, "\n")
@@ -101,11 +109,34 @@ func replaceAliBlock(rcContent, newBlock string) (string, bool) {
 	end := -1
 
 	for i, line := range lines {
-		if strings.HasPrefix(line, "# ali") {
+		// Prefer new-style marker
+		if strings.HasPrefix(line, "# >>> ali >>>") {
 			start = i
-			end = i + 1 // include the "# ali" marker line itself
-			// Include subsequent lines that are part of the ali block:
-			// the eval line, completion line, and any blank lines between them.
+			// Find the closing marker
+			for j := i + 1; j < len(lines); j++ {
+				if strings.HasPrefix(lines[j], "# <<< ali <<<") {
+					end = j + 1
+					break
+				}
+			}
+			if end <= start {
+				// No closing marker found — include until next non-ali line
+				end = i + 1
+				for j := i + 1; j < len(lines); j++ {
+					trimmed := strings.TrimSpace(lines[j])
+					if trimmed == "" || strings.Contains(lines[j], "init ") || strings.Contains(lines[j], "completion ") || strings.HasPrefix(lines[j], "# <<<") {
+						end = j + 1
+					} else {
+						break
+					}
+				}
+			}
+			break
+		}
+		// Legacy marker
+		if strings.HasPrefix(line, "# ali") && !strings.HasPrefix(line, "# alias") {
+			start = i
+			end = i + 1
 			for j := i + 1; j < len(lines); j++ {
 				trimmed := strings.TrimSpace(lines[j])
 				if trimmed == "" || strings.Contains(lines[j], "init ") || strings.Contains(lines[j], "completion ") {
@@ -163,4 +194,10 @@ func rcFilePath(shell string) (string, error) {
 	default:
 		return filepath.Join(home, ".profile"), nil
 	}
+}
+
+// backupFile creates a backup of data at path + ".ali.bak".
+func backupFile(path string, data []byte) error {
+	backupPath := path + ".ali.bak"
+	return os.WriteFile(backupPath, data, 0600) //nolint:gosec // G304: backupPath is derived from trusted rcPath
 }

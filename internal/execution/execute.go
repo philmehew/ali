@@ -64,12 +64,14 @@ func Resolve(fn *models.AliFunction, args []string) (*ResolvedCommand, error) {
 	return &ResolvedCommand{Command: command, Extras: extras}, nil
 }
 
-// substitute replaces $1, $2, ... in the body with the given params.
+// substitute replaces $1, $2, ... in the body with shell-escaped params.
 // It replaces from the highest index down to avoid $1 matching the prefix of $10.
+// Each parameter value is shell-escaped to prevent injection when the
+// resolved command is pasted into a shell.
 func substitute(body string, params []string) string {
 	result := body
 	for i := len(params); i >= 1; i-- {
-		result = strings.ReplaceAll(result, "$"+strconv.Itoa(i), params[i-1])
+		result = strings.ReplaceAll(result, "$"+strconv.Itoa(i), shellArgEscape(params[i-1]))
 	}
 	return result
 }

@@ -100,7 +100,11 @@ func InterceptArgs(args []string, knownSubcommands map[string]bool) []string {
 			continue
 		}
 		if args[i][0] == '-' {
-			// Skip flag and its value if it takes one.
+			// Skip flags. Note: this does not skip the value of a flag
+			// that takes one (e.g., `ali --config path glog` would see
+			// "path" as a non-flag arg). Currently no root-level flags
+			// take values, so this is not a problem. If such flags are
+			// added, this loop must be updated to skip their values too.
 			continue
 		}
 		if strings.HasPrefix(args[i], "__") {
