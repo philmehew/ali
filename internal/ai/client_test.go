@@ -267,3 +267,116 @@ func TestCompleteStream_AuthError(t *testing.T) {
 		t.Errorf("expected auth error, got %q", err.Error())
 	}
 }
+
+func TestCompleteStream_LargeDataLine(t *testing.T) {
+	// Generate a data line larger than the default 64KB scanner buffer.
+	largeContent := strings.Repeat("a", 100_000)
+	sseData := "data: {\"choices\":[{\"delta\":{\"content\":\"" + largeContent + "\"}}]}\ndata: [DONE]\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, sseData)
+	}))
+	defer server.Close()
+
+	client := NewClient(&models.AIConfig{
+		URL:    server.URL,
+		APIKey: "test-key",
+		Model:  "test-model",
+	})
+
+	result, err := client.CompleteStream(context.Background(), []Message{
+		{Role: "user", Content: "test"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("CompleteStream with large data: %v", err)
+	}
+	if len(result) != 100_000 {
+		t.Errorf("expected %d chars, got %d", 100_000, len(result))
+	}
+}
+
+func TestComplete_RetryOnServerError(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = fmt.Fprintf(w, `{"error":{"message":"Service unavailable"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":"hello"}}]}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(&models.AIConfig{
+		URL:    server.URL,
+		APIKey: "test-key",
+		Model:  "test-model",
+	})
+
+	result, err := client.Complete(context.Background(), []Message{
+		{Role: "user", Content: "test"},
+	})
+	if err != nil {
+		t.Fatalf("Complete with retry: %v", err)
+	}
+	if result != "hello" {
+		t.Errorf("expected %q, got %q", "hello", result)
+	}
+	if callCount != 3 {
+		t.Errorf("expected 3 attempts (2 retries + 1 success), got %d", callCount)
+	}
+}
+
+func TestComplete_NoRetryOnAuthError(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintf(w, `{"error":{"message":"Invalid API key"}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(&models.AIConfig{
+		URL:    server.URL,
+		APIKey: "bad-key",
+		Model:  "test-model",
+	})
+
+	_, err := client.Complete(context.Background(), []Message{
+		{Role: "user", Content: "test"},
+	})
+	if err == nil {
+		t.Fatal("expected error for auth failure, got nil")
+	}
+	if callCount != 1 {
+		t.Errorf("expected 1 attempt (no retry for auth error), got %d", callCount)
+	}
+}
+
+func TestIsRetryable(t *testing.T) {
+	tests := []struct {
+		code int
+		want bool
+	}{
+		{http.StatusTooManyRequests, true},
+		{http.StatusInternalServerError, true},
+		{http.StatusBadGateway, true},
+		{http.StatusServiceUnavailable, true},
+		{http.StatusGatewayTimeout, true},
+		{http.StatusOK, false},
+		{http.StatusBadRequest, false},
+		{http.StatusUnauthorized, false},
+		{http.StatusForbidden, false},
+		{http.StatusNotFound, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d", tt.code), func(t *testing.T) {
+			if got := isRetryable(tt.code); got != tt.want {
+				t.Errorf("isRetryable(%d) = %v, want %v", tt.code, got, tt.want)
+			}
+		})
+	}
+}

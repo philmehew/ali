@@ -122,7 +122,10 @@ func zshWrapper() string {
         command ali "$@"
         return
     fi
-    print -z -- "$(command ali "$@")"
+    local _out; _out=$(command ali "$@")
+    if [[ -n "$_out" ]]; then
+        print -z -- "$_out" 2>/dev/null || echo "$_out"
+    fi
 }`
 }
 

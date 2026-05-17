@@ -17,8 +17,8 @@ func TestResolve_WithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if resolved.Command != "git log --oneline -n 10" {
-		t.Errorf("expected %q, got %q", "git log --oneline -n 10", resolved.Command)
+	if resolved.Command != "git log --oneline -n '10'" {
+		t.Errorf("expected %q, got %q", "git log --oneline -n '10'", resolved.Command)
 	}
 	if len(resolved.Extras) != 0 {
 		t.Errorf("expected no extras, got %v", resolved.Extras)
@@ -36,8 +36,8 @@ func TestResolve_OverrideDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if resolved.Command != "git log --oneline -n 20" {
-		t.Errorf("expected %q, got %q", "git log --oneline -n 20", resolved.Command)
+	if resolved.Command != "git log --oneline -n '20'" {
+		t.Errorf("expected %q, got %q", "git log --oneline -n '20'", resolved.Command)
 	}
 }
 
@@ -64,8 +64,8 @@ func TestResolve_ExtraArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if resolved.Command != "echo a" {
-		t.Errorf("expected %q, got %q", "echo a", resolved.Command)
+	if resolved.Command != "echo 'a'" {
+		t.Errorf("expected %q, got %q", "echo 'a'", resolved.Command)
 	}
 	if len(resolved.Extras) != 2 || resolved.Extras[0] != "b" || resolved.Extras[1] != "c" {
 		t.Errorf("expected extras [b c], got %v", resolved.Extras)
@@ -83,8 +83,8 @@ func TestResolve_MultiplePlaceholders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if resolved.Command != "grep -r \"TODO\" \".\"" {
-		t.Errorf("expected %q, got %q", "grep -r \"TODO\" \".\"", resolved.Command)
+	if resolved.Command != "grep -r \"'TODO'\" \"'.'\"" {
+		t.Errorf("expected %q, got %q", "grep -r \"'TODO'\" \"'.'\"", resolved.Command)
 	}
 }
 
@@ -111,8 +111,8 @@ func TestSubstitute_Ordering(t *testing.T) {
 	params := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 
 	result := substitute(body, params)
-	if result != "j and a" {
-		t.Errorf("expected %q, got %q", "j and a", result)
+	if result != "'j' and 'a'" {
+		t.Errorf("expected %q, got %q", "'j' and 'a'", result)
 	}
 }
 
@@ -190,5 +190,69 @@ func TestMaxPlaceholderIndex(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("maxPlaceholderIndex(%q) = %d, want %d", tt.body, got, tt.want)
 		}
+	}
+}
+
+func TestSubstitute_ShellInjection(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   string
+		params []string
+		want   string
+	}{
+		{
+			name:   "semicolon injection",
+			body:   "echo $1",
+			params: []string{"hello; rm -rf /"},
+			want:   "echo 'hello; rm -rf /'",
+		},
+		{
+			name:   "pipe injection",
+			body:   "echo $1",
+			params: []string{"hello | cat /etc/passwd"},
+			want:   "echo 'hello | cat /etc/passwd'",
+		},
+		{
+			name:   "backtick injection",
+			body:   "echo $1",
+			params: []string{"$(whoami)"},
+			want:   "echo '$(whoami)'",
+		},
+		{
+			name:   "single quote in value",
+			body:   "echo $1",
+			params: []string{"it's a test"},
+			want:   "echo 'it'\\''s a test'",
+		},
+		{
+			name:   "empty value",
+			body:   "echo $1",
+			params: []string{""},
+			want:   "echo ''",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := substitute(tt.body, tt.params)
+			if got != tt.want {
+				t.Errorf("substitute() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolve_ShellEscapedValues(t *testing.T) {
+	fn := &models.AliFunction{
+		Name: "deploy",
+		Body: "kubectl apply -f $1 -n $2",
+	}
+
+	resolved, err := Resolve(fn, []string{"pod.yaml; rm -rf /", "production"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if resolved.Command != "kubectl apply -f 'pod.yaml; rm -rf /' -n 'production'" {
+		t.Errorf("expected shell-escaped command, got %q", resolved.Command)
 	}
 }

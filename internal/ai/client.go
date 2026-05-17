@@ -10,9 +10,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/philmehew/ali/internal/models"
 )
+
+const maxRetries = 2
 
 // Message represents a chat message in the OpenAI API format.
 type Message struct {
@@ -68,8 +71,15 @@ type errorResponse struct {
 	} `json:"error"`
 }
 
+// isRetryable reports whether an HTTP status code indicates a transient error
+// that may succeed on retry (429 Too Many Requests or 5xx server errors).
+func isRetryable(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= 500
+}
+
 // Complete sends a non-streaming chat completion request.
 // Returns the assistant's response content.
+// Retries up to maxRetries times on transient errors (429, 5xx) with exponential backoff.
 func (c *Client) Complete(ctx context.Context, messages []Message) (string, error) {
 	reqBody := chatRequest{
 		Model:    c.model,
@@ -82,38 +92,57 @@ func (c *Client) Complete(ctx context.Context, messages []Message) (string, erro
 		return "", fmt.Errorf("could not marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("could not create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Second * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("could not connect to AI service at %s: %w", c.baseURL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return "", fmt.Errorf("could not create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	if resp.StatusCode != http.StatusOK {
-		return "", c.parseError(resp)
-	}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("could not connect to AI service at %s: %w", c.baseURL, err)
+		}
 
-	var chatResp chatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return "", fmt.Errorf("could not parse AI response: %w", err)
-	}
+		if resp.StatusCode == http.StatusOK {
+			var chatResp chatResponse
+			if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+				_ = resp.Body.Close()
+				return "", fmt.Errorf("could not parse AI response: %w", err)
+			}
+			_ = resp.Body.Close()
 
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("AI returned an empty response")
-	}
+			if len(chatResp.Choices) == 0 {
+				return "", fmt.Errorf("AI returned an empty response")
+			}
+			return chatResp.Choices[0].Message.Content, nil
+		}
 
-	return chatResp.Choices[0].Message.Content, nil
+		err = c.parseError(resp)
+		_ = resp.Body.Close()
+		if !isRetryable(resp.StatusCode) {
+			return "", err
+		}
+		lastErr = err
+	}
+	return "", lastErr
 }
 
 // CompleteStream sends a streaming chat completion request.
 // Calls onToken for each content delta received.
 // Returns the full assembled response when done.
+// Retries up to maxRetries times on transient errors (429, 5xx) with exponential backoff.
 func (c *Client) CompleteStream(ctx context.Context, messages []Message, onToken func(string)) (string, error) {
 	reqBody := chatRequest{
 		Model:    c.model,
@@ -126,25 +155,55 @@ func (c *Client) CompleteStream(ctx context.Context, messages []Message, onToken
 		return "", fmt.Errorf("could not marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("could not create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Second * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("could not connect to AI service at %s: %w", c.baseURL, err)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return "", fmt.Errorf("could not create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("could not connect to AI service at %s: %w", c.baseURL, err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			err := c.parseError(resp)
+			_ = resp.Body.Close()
+			if !isRetryable(resp.StatusCode) {
+				return "", err
+			}
+			lastErr = err
+			continue
+		}
+
+		result, err := c.readStream(resp, onToken)
+		if err != nil {
+			return "", err
+		}
+		return result, nil
 	}
+	return "", lastErr
+}
+
+// readStream reads the SSE response body and assembles the full response.
+func (c *Client) readStream(resp *http.Response, onToken func(string)) (string, error) {
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", c.parseError(resp)
-	}
 
 	var builder strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line size
 
 	for scanner.Scan() {
 		line := scanner.Text()

@@ -53,7 +53,7 @@ make build
 sudo make install   # copies to /usr/local/bin/ali
 ```
 
-Requires Go 1.24+ (go.mod tracks the installed version).
+Requires Go 1.26+ (go.mod tracks the installed version).
 
 ### Shell integration
 
@@ -72,7 +72,7 @@ Then reload your shell:
 source ~/.zshrc
 ```
 
-This adds an `eval` line to your rc file that sets up PATH and a shell wrapper function on every startup. The wrapper pastes resolved commands into your input line for editing before execution — so `ali glog 20` puts `git log --oneline -n 20` on your command line, ready to press Enter.
+This adds an `eval` line to your rc file that sets up PATH and a shell wrapper function on every startup. The wrapper pastes resolved commands into your input line for editing before execution — so `ali glog 20` puts `git log --oneline -n 20` on your command line, ready to press Enter. If the paste mechanism fails (e.g. in a non-interactive shell), the resolved command is printed to stdout as a fallback.
 
 Tab completion for function names, subcommands, and default parameter values is set up automatically by `ali install`. After installing, press Tab to complete:
 
@@ -134,7 +134,7 @@ ali ai find all go files larger than 1MB      # pastes: find . -name "*.go" -siz
 ali ai kill process on port 8080              # pastes: lsof -ti:8080 | xargs kill -9
 ```
 
-On first run, an interactive setup wizard will prompt for your API key, host URL, and model. These are saved to `~/.config/ali/ai.yaml` (or `~/Library/Application Support/ali/ai.yaml` on macOS).
+On first run, an interactive setup wizard will prompt for your API key (with hidden input on terminals), host URL (validated), and model. These are saved to `~/.config/ali/ai.yaml` (or `~/Library/Application Support/ali/ai.yaml` on macOS).
 
 ### `ali chat`
 
@@ -170,7 +170,7 @@ Type `exit` or `quit` to end the session. Chat history is kept in memory for the
 
 ### `ali add <name> <body>`
 
-Add a new function. Function names must not be purely numeric (to avoid ambiguity with the numbered references used by `ali list`).
+Add a new function. Function names must start with a letter or underscore and contain only letters, digits, hyphens, and underscores. Names must not be purely numeric (to avoid ambiguity with the numbered references used by `ali list`). Function bodies must not be empty or whitespace-only.
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -282,7 +282,7 @@ Ignored "ssh phil@192.168.0.70"
 - **`i <num>`** — ignore that command (won't appear in future `ali history` runs)
 - **`q`** — quit and save changes
 
-Supports zsh (`~/.zsh_history`) and bash (`~/.bash_history`), auto-detected from `$SHELL`. Override with the `HISTFILE` environment variable.
+Supports zsh (`~/.zsh_history`) and bash (`~/.bash_history`), auto-detected from `$SHELL`. Override with the `HISTFILE` environment variable. History is read efficiently using a ring buffer, so large history files don't require loading the entire file into memory.
 
 ### `ali remove <name>` (alias: `rm`)
 
@@ -335,7 +335,7 @@ To add the eval line to your rc file automatically, use `ali install` instead.
 
 ### `ali install [shell]`
 
-Add the ali eval line to your shell's rc file. It auto-detects your shell from `$SHELL` if no argument is given.
+Add the ali eval line to your shell's rc file. It auto-detects your shell from `$SHELL` if no argument is given. The eval line is marked with `# >>> ali >>>` / `# <<< ali <<<` delimiters for reliable replacement on subsequent runs. Previously installed lines with the older `# ali` marker are also detected and upgraded.
 
 ```bash
 ali install        # auto-detect and add to rc file
@@ -384,7 +384,19 @@ Arguments beyond the highest `$N` placeholder are appended to the command with p
 
 ```bash
 ali add find "find . -name \$1" -D "*.go"
-ali find "*.go" -type f   # resolves: find . -name "*.go" '-type' 'f'
+ali find "*.go" -type f   # resolves: find . -name '*.go' '-type' 'f'
+```
+
+### Shell escaping
+
+All parameter values and extra arguments are shell-escaped before substitution, preventing injection through special characters. Values containing spaces, quotes, or other shell metacharacters are safely quoted:
+
+```bash
+ali add greet "echo \$1"
+ali greet "hello world"   # resolves: echo 'hello world'
+
+ali add deploy "ssh \$1 'cd \$2 && git pull'"
+ali deploy "user; rm -rf /" /safe/path   # resolves: ssh 'user; rm -rf /' 'cd /safe/path && git pull'
 ```
 
 ### Shell features
@@ -469,6 +481,8 @@ context_window_tokens: 128000
 - **`chat_prompt`** — system prompt for `ali chat`. Defaults to "You are a helpful assistant."
 - **`context_window_tokens`** — context window size in tokens. Defaults to 128000 (gpt-4o-mini). Used by `ali chat` to manage conversation history and trim old messages when the budget is exceeded.
 
+Transient errors (rate limits and server errors) are retried automatically with exponential backoff — up to 2 retries with 1s and 2s delays. Authentication and other non-retryable errors fail immediately.
+
 Environment variables take priority over the config file, which is useful for keeping API keys out of dotfiles:
 
 ```bash
@@ -476,7 +490,39 @@ export ALI_AI_API_KEY=sk-...
 export ALI_AI_URL=https://my-server.com/v1
 ```
 
-## Project structure
+## Security
+
+### Command execution model
+
+Resolved commands are **pasted into your shell's input buffer** for editing before execution — not executed directly. This gives you a chance to review and modify commands before pressing Enter. The shell wrapper function (set up by `ali init`) handles the paste mechanism; without it, the command is simply printed to stdout.
+
+### Parameter escaping
+
+All parameter values and extra arguments are shell-escaped using single-quote wrapping before substitution. This prevents injection through special characters like `$()`, backticks, `;`, and `&` in user-supplied arguments.
+
+### API key storage
+
+- API keys are stored in `ai.yaml` with **0600 permissions** (owner read/write only). The config directory is created with **0700 permissions**.
+- When saving, the config file is written atomically (temp file + rename) to prevent corruption from crashes mid-write. Permissions are reset to 0600 on every save, even if they were manually loosened.
+- The setup wizard hides API key input on terminals (using `term.ReadPassword`).
+- API keys are never included in error messages or logs.
+- For additional security, store your key in an environment variable instead of the config file: `export ALI_AI_API_KEY=sk-...`
+
+### AI interaction
+
+- `ali ai` responses are cleaned of markdown code fences but are otherwise unfiltered — the user-review model (pasting, not executing) is the safety mechanism.
+- `ali chat` skips files larger than 1MB and binary files (detected by null bytes in the first 512 bytes), with warnings for each skipped file.
+- Transient API errors (429 rate limit, 5xx server errors) are retried with exponential backoff (up to 2 retries). Authentication errors fail immediately.
+
+### Shell integration
+
+- The shell wrapper code generated by `ali init` is static — it's not user-supplied and cannot be injected through ali configuration.
+- `ali install` creates a backup of your rc file (at `<rcpath>.ali.bak`) before modifying it.
+- If the paste mechanism (`print -z` in zsh) fails, the resolved command falls back to being printed to stdout.
+
+### Config file integrity
+
+Config files are written atomically (temp file + rename) to prevent corruption from crashes or concurrent access.
 
 ```
 ali/
@@ -491,8 +537,10 @@ ali/
 │   │   ├── aiconfig.go          # LoadAIConfig, SaveAIConfig, AIConfigPath
 │   │   └── config_test.go
 │   ├── ai/
-│   │   ├── client.go            # OpenAI-compatible HTTP client
-│   │   └── client_test.go
+│   │   ├── client.go            # OpenAI-compatible HTTP client (with retry)
+│   │   ├── tokens.go            # Token estimation and context budget
+│   │   ├── client_test.go
+│   │   └── tokens_test.go
 │   ├── execution/
 │   │   ├── execute.go           # Parameter substitution + command output
 │   │   └── execute_test.go
@@ -567,7 +615,7 @@ git branch -d chore/my-change               # local
 git push origin --delete chore/my-change     # remote
 ```
 
-CI runs `go test` and `go vet` automatically on pull requests.
+CI runs `go test`, `go vet`, and `golangci-lint` automatically on pull requests.
 
 ### Releasing
 
@@ -610,7 +658,9 @@ To have GitHub automatically delete remote branches on merge, enable **Settings 
 | Package | Purpose |
 |---------|---------|
 | [github.com/spf13/cobra](https://github.com/spf13/cobra) | CLI framework |
-| [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3) | YAML config parsing |
+| [github.com/spf13/pflag](https://github.com/spf13/pflag) | POSIX/GNU flag parsing |
+| [go.yaml.in/yaml/v3](https://go.yaml.in/yaml/v3) | YAML config parsing |
+| [golang.org/x/term](https://pkg.go.dev/golang.org/x/term) | Terminal mode detection (hidden API key input) |
 
 ## Running tests
 

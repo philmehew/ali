@@ -24,7 +24,13 @@ func newAddCmd() *cobra.Command {
 			if _, err := strconv.Atoi(name); err == nil {
 				return fmt.Errorf("function name %q must not be a number — use a descriptive name instead", name)
 			}
+			if err := models.ValidateFunctionName(name); err != nil {
+				return err
+			}
 			body := args[1]
+			if strings.TrimSpace(body) == "" {
+				return fmt.Errorf("function body must not be empty")
+			}
 
 			cfg, err := config.Load()
 			if err != nil {
