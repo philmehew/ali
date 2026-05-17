@@ -223,9 +223,13 @@ its place. Type a number to add, "i" to ignore, or "q" to quit.`,
 	return cmd
 }
 
-// removeFromCandidates removes the item at index i from the slice.
+// removeFromCandidates removes the item at index i from the slice,
+// returning a new slice without mutating the original's backing array.
 func removeFromCandidates(candidates []cmdFreq, i int) []cmdFreq {
-	return append(candidates[:i], candidates[i+1:]...)
+	result := make([]cmdFreq, 0, len(candidates)-1)
+	result = append(result, candidates[:i]...)
+	result = append(result, candidates[i+1:]...)
+	return result
 }
 
 // historyPath resolves the shell history file path.
@@ -241,10 +245,11 @@ func historyPath() (string, error) {
 	}
 
 	shellPath := os.Getenv("SHELL")
+	base := filepath.Base(shellPath)
 	switch {
-	case strings.Contains(shellPath, "zsh"):
+	case strings.HasPrefix(base, "zsh"):
 		return filepath.Join(home, ".zsh_history"), nil
-	case strings.Contains(shellPath, "bash"):
+	case strings.HasPrefix(base, "bash"):
 		return filepath.Join(home, ".bash_history"), nil
 	default:
 		return filepath.Join(home, ".zsh_history"), nil
@@ -254,21 +259,43 @@ func historyPath() (string, error) {
 // zshMetaRe matches the zsh extended history prefix: `: timestamp:duration;`
 var zshMetaRe = regexp.MustCompile(`^: \d+:\d+;`)
 
-// parseHistory reads the last N lines of a history file and returns
-// cleaned command strings.
+// parseHistory reads a history file and returns the last N cleaned
+// command strings. It uses a ring buffer to avoid loading the entire
+// file into memory at once.
 func parseHistory(path string, lines int) ([]string, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: history path is from trusted env/shell detection.
+	f, err := os.Open(path) //nolint:gosec // G304: history path is from trusted env/shell detection.
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w", path, err)
 	}
+	defer f.Close() //nolint:errcheck // read-only file, error on close is inconsequential
 
-	allLines := strings.Split(string(data), "\n")
-
-	start := len(allLines) - lines
-	if start < 0 {
-		start = 0
+	// Ring buffer: keep only the last N lines.
+	ring := make([]string, lines)
+	count := 0
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		ring[count%lines] = scanner.Text()
+		count++
 	}
-	tail := allLines[start:]
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("could not read %s: %w", path, err)
+	}
+
+	// Determine how many lines we actually collected.
+	n := count
+	if n > lines {
+		n = lines
+	}
+
+	// Read the ring buffer in order (oldest first).
+	startIdx := 0
+	if count > lines {
+		startIdx = count % lines
+	}
+	tail := make([]string, n)
+	for i := 0; i < n; i++ {
+		tail[i] = ring[(startIdx+i)%lines]
+	}
 
 	var commands []string
 	var current strings.Builder

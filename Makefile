@@ -11,8 +11,10 @@ build:
 	$(GO) build $(LDFLAGS) -o $(BINARY) ./cmd/ali
 	codesign --force --sign - $(BINARY) 2>/dev/null || true
 
+PREFIX ?= /usr/local
 install: build
-	cp $(BINARY) /usr/local/bin/
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 755 $(BINARY) $(DESTDIR)$(PREFIX)/bin/ali
 
 test:
 	$(GO) test ./... -v

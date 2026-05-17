@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/philmehew/ali/internal/config"
 	"github.com/philmehew/ali/internal/models"
@@ -153,6 +153,10 @@ func editFunction(cfg *models.AliConfig, idx int) error {
 
 	if editedFn.Name == "" {
 		return fmt.Errorf("edited function has no name")
+	}
+
+	if err := models.ValidateFunctionName(editedFn.Name); err != nil {
+		return err
 	}
 
 	// If the name changed, check for conflicts.

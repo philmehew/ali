@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/philmehew/ali/internal/models"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Path returns the path to the ali config file.
@@ -65,40 +65,12 @@ func Save(cfg *models.AliConfig) error {
 		return err
 	}
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		return fmt.Errorf("could not create config directory: %w", err)
-	}
-
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("could not marshal config: %w", err)
 	}
 
-	// Write to temp file in the same directory, then rename for atomicity.
-	tmp, err := os.CreateTemp(dir, "ali-config-*.tmp")
-	if err != nil {
-		return fmt.Errorf("could not create temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("could not write temp file: %w", err)
-	}
-
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("could not close temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("could not rename temp file: %w", err)
-	}
-
-	return nil
+	return atomicWrite(path, data, 0)
 }
 
 // FindFunction looks up a function by name. Returns nil if not found.
@@ -126,4 +98,43 @@ func MoveFunction(cfg *models.AliConfig, fromIdx, toIdx int) {
 	fn := cfg.Functions[fromIdx]
 	cfg.Functions = append(cfg.Functions[:fromIdx], cfg.Functions[fromIdx+1:]...)
 	cfg.Functions = append(cfg.Functions[:toIdx], append([]models.AliFunction{fn}, cfg.Functions[toIdx:]...)...)
+}
+
+// atomicWrite writes data to path atomically using a temp file and rename.
+// If perm is non-zero, the file is chmod'd to perm after writing.
+func atomicWrite(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("could not create config directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(dir, "ali-*.tmp")
+	if err != nil {
+		return fmt.Errorf("could not create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("could not write temp file: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("could not close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("could not rename temp file: %w", err)
+	}
+
+	if perm != 0 {
+		if err := os.Chmod(path, perm); err != nil { //nolint:gosec // G301: perm is caller-controlled — 0600 for secrets, 0 for default
+			return fmt.Errorf("could not set permissions on %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
