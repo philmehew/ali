@@ -147,13 +147,19 @@ Start an interactive chat session with an AI assistant. Responses are streamed i
 
 ```bash
 ali chat
-ali chat — type 'exit' or 'quit' to end, Ctrl+C to interrupt
+ali chat — type /help for commands, /exit to quit
 
-> what does the -exec flag do in find?
+[5%] > what does the -exec flag do in find?
 The -exec flag allows you to run a command on each file found...
-> how do I use xargs instead?
+[8%] > how do I use xargs instead?
 xargs reads items from stdin and runs a command for each one...
-> exit
+[12%] > /file main.go
+Added /home/user/project/main.go. Context: 2500/123904 tokens (2%)
+[14%] > explain the ServeHTTP method in this file
+The ServeHTTP method on line 42 handles incoming requests...
+[30%] > /clear
+Conversation cleared. 1 file(s) still in context.
+[5%] > /exit
 ```
 
 Use `--file` and `--folder` to include code, configs, or logs in the context so the AI can answer questions about them:
@@ -166,7 +172,26 @@ ali chat --folder ./src --file README.md
 
 Files larger than 1MB and binary files are skipped with a warning. When the conversation exceeds the context window budget, the oldest messages are trimmed automatically.
 
-Type `exit` or `quit` to end the session. Chat history is kept in memory for the session but not persisted.
+**In-session commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/file <path>` | Add a file to the conversation context |
+| `/folder <path>` | Add all files in a folder (non-recursive) |
+| `/files` | List files currently in context |
+| `/clear` | Clear conversation history (keeps file context) |
+| `/clear all` | Clear conversation and file context |
+| `/context` | Show token usage, budget, and turn count |
+| `/model` | Show current model, URL, and context window |
+| `/model <name>` | Switch to a different model for this session |
+| `/window` | Show context window size |
+| `/window <size>` | Set context window size (e.g., `/window 128000`) |
+| `/help` | Show all commands |
+| `/exit`, `/quit` | End the session |
+
+Use `//` to send a message that starts with `/` (e.g., `//file not a command`).
+
+Press Ctrl+C during a response to interrupt the AI and keep the partial output in the conversation. Chat history is kept in memory for the session but not persisted.
 
 ### `ali add <name> <body>`
 

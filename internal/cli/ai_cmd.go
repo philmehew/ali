@@ -50,8 +50,8 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 			query := strings.Join(args, " ")
 
 			messages := []ai.Message{
-				{Role: "system", Content: cfg.AiPrompt},
-				{Role: "user", Content: query},
+				{Role: ai.RoleSystem, Content: cfg.AiPrompt},
+				{Role: ai.RoleUser, Content: query},
 			}
 
 			outputf("Thinking...\n")

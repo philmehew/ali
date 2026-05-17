@@ -1,4 +1,6 @@
 // Package cli implements the ali command-line interface using Cobra.
+//
+//nolint:goconst // UI strings (command names, help text) are not beneficial as constants
 package cli
 
 import (

@@ -17,6 +17,13 @@ import (
 
 const maxRetries = 2
 
+// Message role constants.
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+)
+
 // Message represents a chat message in the OpenAI API format.
 type Message struct {
 	Role    string `json:"role"`
