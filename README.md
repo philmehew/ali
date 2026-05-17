@@ -72,14 +72,16 @@ Then reload your shell:
 source ~/.zshrc
 ```
 
-This adds an `eval` line to your rc file that sets up PATH and a shell wrapper function on every startup. The wrapper pastes resolved commands into your input line for editing before execution — so `ali glog 20` puts `git log --oneline -n 20` on your command line, ready to press Enter. If the paste mechanism fails (e.g. in a non-interactive shell), the resolved command is printed to stdout as a fallback.
+This adds an `eval` line to your rc file that sets up PATH and a shell wrapper function on every startup. The wrapper pastes resolved commands into your input line for editing before execution — so `ali run glog 20` puts `git log --oneline -n 20` on your command line, ready to press Enter. If the paste mechanism fails (e.g. in a non-interactive shell), the resolved command is printed to stdout as a fallback.
 
 Tab completion for function names, subcommands, and default parameter values is set up automatically by `ali install`. After installing, press Tab to complete:
 
 ```bash
-ali gl<Tab>       # completes to: ali glog
-ali <Tab><Tab>     # lists all functions and subcommands
-ali glog <Tab>     # completes default value for $1 (e.g. "10")
+ali run gl<Tab>       # completes to: ali run glog
+ali r gl<Tab>         # same thing, using the 'r' alias
+ali <Tab><Tab>         # lists all subcommands
+ali run <Tab><Tab>     # lists all function names
+ali run glog <Tab>     # completes default value for $1 (e.g. "10")
 ```
 
 ## Quick Start
@@ -89,16 +91,19 @@ ali glog <Tab>     # completes default value for $1 (e.g. "10")
 ali add glog "git log --oneline -n \$1" -d "Pretty git log" -D "10"
 
 # Run it (uses default value "10")
-ali glog
+ali run glog
 
 # Override the default
-ali glog 20
+ali run glog 20
+
+# Use the short alias
+ali r glog 20
 
 # List all functions
 ali list
 
 # Run, edit, or remove by number (from ali list)
-ali 3          # run function #3
+ali run 3      # run function #3
 ali edit 3     # edit function #3
 ali rm 3       # remove function #3
 
@@ -111,18 +116,17 @@ ali remove glog
 
 ## Commands
 
-### `ali <name> [params...]`
+### `ali run <name> [params...]` (alias: `r`)
 
 Resolve a stored function and paste it into your command line. You can also use the number shown in `ali list` instead of a name. Any parameters override defaults left-to-right.
 
 ```bash
-ali glog          # uses default for $1
-ali glog 20       # overrides $1 with "20"
-ali 3             # resolve function #3 from ali list
-ali mygrep TODO . # supplies $1=TODO, $2=.
+ali run glog          # uses default for $1
+ali run glog 20       # overrides $1 with "20"
+ali r glog 20         # same thing, using the 'r' alias
+ali run 3             # resolve function #3 from ali list
+ali run mygrep TODO . # supplies $1=TODO, $2=.
 ```
-
-This is shorthand for `ali run <name> [params...]`.
 
 ### `ali ai <query>`
 
@@ -396,11 +400,11 @@ Functions use positional placeholders `$1` through `$N`:
 
 ```bash
 ali add deploy "ssh \$1 'cd \$2 && git pull'"
-ali deploy prod /var/www   # $1=prod, $2=/var/www
+ali run deploy prod /var/www   # $1=prod, $2=/var/www
 
 ali add glog "git log --oneline -n \$1" -D "10"
-ali glog       # $1=10 (default)
-ali glog 20    # $1=20 (override)
+ali run glog       # $1=10 (default)
+ali run glog 20    # $1=20 (override)
 ```
 
 ### Extra arguments
@@ -409,7 +413,7 @@ Arguments beyond the highest `$N` placeholder are appended to the command with p
 
 ```bash
 ali add find "find . -name \$1" -D "*.go"
-ali find "*.go" -type f   # resolves: find . -name '*.go' '-type' 'f'
+ali run find "*.go" -type f   # resolves: find . -name '*.go' '-type' 'f'
 ```
 
 ### Shell escaping
@@ -418,10 +422,10 @@ All parameter values and extra arguments are shell-escaped before substitution, 
 
 ```bash
 ali add greet "echo \$1"
-ali greet "hello world"   # resolves: echo 'hello world'
+ali run greet "hello world"   # resolves: echo 'hello world'
 
 ali add deploy "ssh \$1 'cd \$2 && git pull'"
-ali deploy "user; rm -rf /" /safe/path   # resolves: ssh 'user; rm -rf /' 'cd /safe/path && git pull'
+ali run deploy "user; rm -rf /" /safe/path   # resolves: ssh 'user; rm -rf /' 'cd /safe/path && git pull'
 ```
 
 ### Shell features
@@ -430,7 +434,9 @@ The function body is executed through `/bin/sh -c`, so pipes, redirects, subshel
 
 ```bash
 ali add count "git log --oneline | wc -l"
+ali run count
 ali add status "echo \$1 && echo \$2"
+ali run status hello world
 ```
 
 Resolved commands are pasted into your shell's input line for editing before execution — not executed directly. This requires shell integration (set up via `ali install`).
@@ -572,7 +578,7 @@ ali/
 │   ├── version/
 │   │   └── version.go           # Version constant (injected via -ldflags)
 │   └── cli/
-│       ├── root.go              # Root command + arg interception
+│       ├── root.go              # Root command
 │       ├── add.go               # ali add
 │       ├── ai_cmd.go            # ali ai
 │       ├── ai_setup.go          # AI setup wizard
@@ -585,7 +591,7 @@ ali/
 │       ├── list.go              # ali list
 │       ├── remove.go            # ali remove
 │       ├── edit.go              # ali edit
-│       └── run.go               # ali run (hidden)
+│       └── run.go               # ali run (alias: r)
 ├── go.mod
 ├── go.sum
 └── Makefile

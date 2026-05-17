@@ -12,22 +12,6 @@ import (
 func main() {
 	rootCmd := cli.NewRootCmd()
 
-	// Build the set of known subcommands (including aliases) for argument interception.
-	knownSubcommands := make(map[string]bool)
-	for _, cmd := range rootCmd.Commands() {
-		knownSubcommands[cmd.Name()] = true
-		for _, alias := range cmd.Aliases {
-			knownSubcommands[alias] = true
-		}
-	}
-	// Cobra adds these lazily, so they aren't in Commands() at build time.
-	knownSubcommands["help"] = true
-	knownSubcommands["completion"] = true
-
-	// Intercept args: if the first non-flag arg is not a known subcommand,
-	// insert "run" before it so `ali glog 20` becomes `ali run glog 20`.
-	os.Args = cli.InterceptArgs(os.Args, knownSubcommands)
-
 	// Completion commands must output to stdout even when stdout is a pipe
 	// (e.g. eval "$(ali completion zsh)"). Force the output writer to stdout
 	// for completion subcommands so scripts can capture the output.
