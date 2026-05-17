@@ -67,5 +67,7 @@ Both <from> and <to> can be a 1-based number (as shown in ali list) or a functio
 		},
 	}
 
+	cmd.ValidArgsFunction = functionNamesCompletion
+
 	return cmd
 }

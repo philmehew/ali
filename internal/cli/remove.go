@@ -41,6 +41,8 @@ func newRemoveCmd() *cobra.Command {
 		},
 	}
 
+	cmd.ValidArgsFunction = functionNamesCompletion
+
 	return cmd
 }
 
