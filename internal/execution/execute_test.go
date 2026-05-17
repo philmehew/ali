@@ -1,3 +1,4 @@
+//nolint:goconst // test string repetitions are intentional
 package execution
 
 import (
