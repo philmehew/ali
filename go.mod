@@ -1,6 +1,6 @@
 module github.com/philmehew/ali
 
-go 1.26
+go 1.26.2
 
 require (
 	github.com/spf13/cobra v1.10.2
