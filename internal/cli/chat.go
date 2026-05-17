@@ -69,7 +69,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 			budget := ai.ContextBudget(cfg.ContextWindow)
 
 			history := []ai.Message{
-				{Role: "system", Content: cfg.ChatPrompt},
+				{Role: ai.RoleSystem, Content: cfg.ChatPrompt},
 			}
 
 			// Ingest files and folders into context.
@@ -87,7 +87,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 				}
 
 				if content.Len() > 0 {
-					history = append(history, ai.Message{Role: "user", Content: content.String()})
+					history = append(history, ai.Message{Role: ai.RoleUser, Content: content.String()})
 					tokens := ai.EstimateTokens(content.String())
 					outputf("Ingested %d file(s) (~%d tokens). Context budget: %d tokens.\n\n", fileCount, tokens, budget)
 				}
@@ -127,7 +127,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 					continue
 				}
 
-				history = append(history, ai.Message{Role: "user", Content: line})
+				history = append(history, ai.Message{Role: ai.RoleUser, Content: line})
 
 				// Trim oldest conversation turns if over budget.
 				// Keep system message (index 0) and file context (index 1 if present).
@@ -171,7 +171,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 						outputln()
 						outputln("[interrupted]")
 						if printed.Len() > 0 {
-							history = append(history, ai.Message{Role: "assistant", Content: printed.String()})
+							history = append(history, ai.Message{Role: ai.RoleAssistant, Content: printed.String()})
 						} else {
 							history = history[:len(history)-1]
 						}
@@ -185,7 +185,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 				outputln()
 				outputln()
 
-				history = append(history, ai.Message{Role: "assistant", Content: response})
+				history = append(history, ai.Message{Role: ai.RoleAssistant, Content: response})
 			}
 
 			return nil
@@ -510,7 +510,7 @@ func addFileContentToHistory(history *[]ai.Message, content string) {
 	if len(*history) > 1 && strings.HasPrefix((*history)[1].Content, "<file") {
 		(*history)[1].Content += content
 	} else {
-		fileMsg := ai.Message{Role: "user", Content: content}
+		fileMsg := ai.Message{Role: ai.RoleUser, Content: content}
 		*history = append([]ai.Message{(*history)[0], fileMsg}, (*history)[1:]...)
 	}
 }
