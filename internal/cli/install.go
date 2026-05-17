@@ -49,16 +49,9 @@ func installShellConfig(shell string) error {
 		return err
 	}
 
-	// Check if ali is already in the rc file.
 	data, err := os.ReadFile(rcPath) //nolint:gosec // G304: rcPath is from trusted home directory detection
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("could not read %s: %w", rcPath, err)
-	}
-
-	marker := "ali init"
-	if strings.Contains(string(data), marker) {
-		outputf("ali is already configured in %s\n", rcPath)
-		return nil
 	}
 
 	// Resolve the full path to the ali binary so the eval line works
@@ -68,20 +61,89 @@ func installShellConfig(shell string) error {
 		return fmt.Errorf("could not determine ali binary path: %w", err)
 	}
 
-	// Append the eval line with the full binary path.
-	evalLine := fmt.Sprintf("\n# ali\neval \"$(%s init %s)\"\n", exePath, shell)
+	evalLine := fmt.Sprintf("eval \"$(%s init %s)\"", exePath, shell)
+	compLine := completionInstallLine(exePath, shell)
+	newBlock := fmt.Sprintf("\n# ali\n%s\n%s\n", evalLine, compLine)
+
+	// If the rc file already has an ali block, replace it.
+	if len(data) > 0 && strings.Contains(string(data), "# ali") {
+		updated, replaced := replaceAliBlock(string(data), newBlock)
+		if replaced {
+			if err := os.WriteFile(rcPath, []byte(updated), 0600); err != nil { //nolint:gosec // G304: rcPath is from trusted home directory detection.
+				return fmt.Errorf("could not write to %s: %w", rcPath, err)
+			}
+			outputf("Updated ali in %s. Run `source %s` or restart your terminal.\n", rcPath, rcPath)
+			return nil
+		}
+	}
+
+	// Append a new ali block.
 	f, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec // G304: rcPath is from trusted home directory detection
 	if err != nil {
 		return fmt.Errorf("could not write to %s: %w", rcPath, err)
 	}
 	defer f.Close() //nolint:errcheck // file will be closed on defer
 
-	if _, err := f.WriteString(evalLine); err != nil {
+	if _, err := f.WriteString(newBlock); err != nil {
 		return fmt.Errorf("could not write to %s: %w", rcPath, err)
 	}
 
 	outputf("Added ali to %s. Run `source %s` or restart your terminal.\n", rcPath, rcPath)
 	return nil
+}
+
+// replaceAliBlock finds the existing ali block in rcContent (a line starting
+// with "# ali" followed by related lines) and replaces it with newBlock.
+// Returns the updated content and whether a replacement was made.
+func replaceAliBlock(rcContent, newBlock string) (string, bool) {
+	lines := strings.Split(rcContent, "\n")
+	start := -1
+	end := -1
+
+	for i, line := range lines {
+		if strings.HasPrefix(line, "# ali") {
+			start = i
+			end = i + 1 // include the "# ali" marker line itself
+			// Include subsequent lines that are part of the ali block:
+			// the eval line, completion line, and any blank lines between them.
+			for j := i + 1; j < len(lines); j++ {
+				trimmed := strings.TrimSpace(lines[j])
+				if trimmed == "" || strings.Contains(lines[j], "init ") || strings.Contains(lines[j], "completion ") {
+					end = j + 1
+				} else {
+					break
+				}
+			}
+			break
+		}
+	}
+
+	if start == -1 {
+		return rcContent, false
+	}
+
+	replacementLines := strings.Split(strings.Trim(newBlock, "\n"), "\n")
+	result := make([]string, 0, len(lines)-end+start+len(replacementLines))
+	result = append(result, lines[:start]...)
+	result = append(result, replacementLines...)
+	result = append(result, lines[end:]...)
+	return strings.Join(result, "\n"), true
+}
+
+// completionInstallLine returns a shell-specific line to set up ali completions.
+// Uses the full binary path so it works without ali being on PATH.
+func completionInstallLine(exePath, shell string) string {
+	switch shell {
+	case shellZsh:
+		// compinit must be called before compdef is available.
+		return fmt.Sprintf("autoload -Uz compinit && compinit; eval \"$(%s completion zsh)\"", exePath)
+	case shellBash:
+		return fmt.Sprintf("source <(%s completion bash)", exePath)
+	case shellFish:
+		return fmt.Sprintf("%s completion fish | source", exePath)
+	default:
+		return ""
+	}
 }
 
 // rcFilePath returns the path to the shell's rc file.

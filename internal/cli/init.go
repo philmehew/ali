@@ -117,15 +117,41 @@ func executablePath() (string, error) {
 // They enable pasting resolved commands into the shell's input buffer.
 
 func zshWrapper() string {
-	return `ali() { print -z -- "$(command ali "$@")"; }`
+	return `ali() {
+    if [[ "$1" == "__complete" || "$1" == "__completeNoDesc" || "$1" == "completion" ]]; then
+        command ali "$@"
+        return
+    fi
+    print -z -- "$(command ali "$@")"
+}`
 }
 
 func bashWrapper() string {
-	return `ali() { local _out; _out=$(command ali "$@"); if [[ -n "$_out" ]]; then if [[ -t 0 ]] && [[ ${BASH_VERSINFO[0]} -ge 4 ]]; then read -e -i "$_out" -p ""; eval -- "$REPLY"; else printf '%s\n' "$_out"; fi; fi; }`
+	return `ali() {
+    if [[ "$1" == "__complete" || "$1" == "__completeNoDesc" || "$1" == "completion" ]]; then
+        command ali "$@"
+        return
+    fi
+    local _out; _out=$(command ali "$@");
+    if [[ -n "$_out" ]]; then
+        if [[ -t 0 ]] && [[ ${BASH_VERSINFO[0]} -ge 4 ]]; then
+            read -e -i "$_out" -p ""; history -s "$REPLY"; eval -- "$REPLY"
+        else
+            history -s "$_out"; printf '%s\n' "$_out"
+        fi
+    fi
+}`
 }
 
 func fishWrapper() string {
-	return `function ali; set -l _out (command ali $argv); test -n "$_out"; and commandline --replace -- $_out; end`
+	return `function ali
+    if test "$argv[1]" = "__complete" -o "$argv[1]" = "__completeNoDesc" -o "$argv[1]" = "completion"
+        command ali $argv
+        return
+    end
+    set -l _out (command ali $argv)
+    test -n "$_out"; and commandline --replace -- $_out
+end`
 }
 
 func posixWrapper() string {
