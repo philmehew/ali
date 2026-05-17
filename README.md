@@ -36,7 +36,7 @@
                     -.---..--... .. ......#+#  .
 ```
 
-A lightweight CLI tool for managing parametric command-line snippets. A structured alternative to shell aliases and history — resolved commands are pasted into your shell for editing before execution.
+A lightweight CLI tool for managing parametric command-line snippets with AI-powered command generation and chat. A structured alternative to shell aliases and history — resolved commands are pasted into your shell for editing before execution.
 
 **macOS and Linux only.** ali relies on `/bin/sh` for command execution and Unix shell conventions — it does not run on Windows.
 
@@ -73,6 +73,14 @@ source ~/.zshrc
 ```
 
 This adds an `eval` line to your rc file that sets up PATH and a shell wrapper function on every startup. The wrapper pastes resolved commands into your input line for editing before execution — so `ali glog 20` puts `git log --oneline -n 20` on your command line, ready to press Enter.
+
+Tab completion for function names, subcommands, and default parameter values is set up automatically by `ali install`. After installing, press Tab to complete:
+
+```bash
+ali gl<Tab>       # completes to: ali glog
+ali <Tab><Tab>     # lists all functions and subcommands
+ali glog <Tab>     # completes default value for $1 (e.g. "10")
+```
 
 ## Quick Start
 
@@ -115,6 +123,50 @@ ali mygrep TODO . # supplies $1=TODO, $2=.
 ```
 
 This is shorthand for `ali run <name> [params...]`.
+
+### `ali ai <query>`
+
+Generate a shell command from a natural language query using an AI service. The response is pasted into your command line for editing before execution — just like `ali run`.
+
+```bash
+ali ai how do I check disk size              # pastes: df -h
+ali ai find all go files larger than 1MB      # pastes: find . -name "*.go" -size +1M
+ali ai kill process on port 8080              # pastes: lsof -ti:8080 | xargs kill -9
+```
+
+On first run, an interactive setup wizard will prompt for your API key, host URL, and model. These are saved to `~/.config/ali/ai.yaml` (or `~/Library/Application Support/ali/ai.yaml` on macOS).
+
+### `ali chat`
+
+Start an interactive chat session with an AI assistant. Responses are streamed in real time.
+
+| Flag | Description |
+|------|-------------|
+| `--file` | Include a file's contents in the conversation context (repeatable) |
+| `--folder` | Include all files in a folder in the conversation context (repeatable, non-recursive) |
+
+```bash
+ali chat
+ali chat — type 'exit' or 'quit' to end, Ctrl+C to interrupt
+
+> what does the -exec flag do in find?
+The -exec flag allows you to run a command on each file found...
+> how do I use xargs instead?
+xargs reads items from stdin and runs a command for each one...
+> exit
+```
+
+Use `--file` and `--folder` to include code, configs, or logs in the context so the AI can answer questions about them:
+
+```bash
+ali chat --file main.go --file config.yaml
+ali chat --folder ./src
+ali chat --folder ./src --file README.md
+```
+
+Files larger than 1MB and binary files are skipped with a warning. When the conversation exceeds the context window budget, the oldest messages are trimmed automatically.
+
+Type `exit` or `quit` to end the session. Chat history is kept in memory for the session but not persisted.
 
 ### `ali add <name> <body>`
 
@@ -393,7 +445,36 @@ ignore:
 | Variable | Description |
 |----------|-------------|
 | `ALI_CONFIG` | Override the config file path |
+| `ALI_AI_CONFIG` | Override the AI config file path |
+| `ALI_AI_URL` | Override the AI service URL |
+| `ALI_AI_API_KEY` | Override the AI API key (takes priority over config file) |
+| `ALI_AI_MODEL` | Override the AI model name |
+| `ALI_AI_CONTEXT_WINDOW` | Override the context window size (tokens) |
 | `EDITOR` | Editor used by `ali edit` (defaults to `vi`) |
+
+### AI configuration
+
+AI settings are stored in a separate config file (`ai.yaml`) in the same directory as `functions.yaml`. If the file doesn't exist, defaults are used and `ali ai`/`ali chat` will launch a setup wizard on first run.
+
+```yaml
+url: https://api.openai.com/v1
+api_key: sk-...
+model: gpt-4o-mini
+ai_prompt: "The user is asking for one or more specific shell commands..."
+chat_prompt: "You are a helpful assistant."
+context_window_tokens: 128000
+```
+
+- **`ai_prompt`** — system prompt for `ali ai`. Defaults to instructing the AI to respond with shell commands only.
+- **`chat_prompt`** — system prompt for `ali chat`. Defaults to "You are a helpful assistant."
+- **`context_window_tokens`** — context window size in tokens. Defaults to 128000 (gpt-4o-mini). Used by `ali chat` to manage conversation history and trim old messages when the budget is exceeded.
+
+Environment variables take priority over the config file, which is useful for keeping API keys out of dotfiles:
+
+```bash
+export ALI_AI_API_KEY=sk-...
+export ALI_AI_URL=https://my-server.com/v1
+```
 
 ## Project structure
 
@@ -403,10 +484,15 @@ ali/
 ├── internal/
 │   ├── models/
 │   │   ├── function.go          # AliFunction, AliConfig structs
+│   │   ├── ai.go                # AIConfig struct
 │   │   └── function_test.go
 │   ├── config/
 │   │   ├── config.go            # Load, Save, Path, FindFunction
+│   │   ├── aiconfig.go          # LoadAIConfig, SaveAIConfig, AIConfigPath
 │   │   └── config_test.go
+│   ├── ai/
+│   │   ├── client.go            # OpenAI-compatible HTTP client
+│   │   └── client_test.go
 │   ├── execution/
 │   │   ├── execute.go           # Parameter substitution + command output
 │   │   └── execute_test.go
@@ -415,6 +501,10 @@ ali/
 │   └── cli/
 │       ├── root.go              # Root command + arg interception
 │       ├── add.go               # ali add
+│       ├── ai_cmd.go            # ali ai
+│       ├── ai_setup.go          # AI setup wizard
+│       ├── chat.go              # ali chat
+│       ├── completion.go        # Tab completion
 │       ├── move.go              # ali move (alias: mv)
 │       ├── history.go           # ali history
 │       ├── init.go              # ali init

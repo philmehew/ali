@@ -118,7 +118,7 @@ func executablePath() (string, error) {
 
 func zshWrapper() string {
 	return `ali() {
-    if [[ "$1" == "__complete" || "$1" == "__completeNoDesc" || "$1" == "completion" ]]; then
+    if [[ "$1" == "__complete" || "$1" == "__completeNoDesc" || "$1" == "completion" || "$1" == "chat" ]]; then
         command ali "$@"
         return
     fi
@@ -128,7 +128,7 @@ func zshWrapper() string {
 
 func bashWrapper() string {
 	return `ali() {
-    if [[ "$1" == "__complete" || "$1" == "__completeNoDesc" || "$1" == "completion" ]]; then
+    if [[ "$1" == "__complete" || "$1" == "__completeNoDesc" || "$1" == "completion" || "$1" == "chat" ]]; then
         command ali "$@"
         return
     fi
@@ -145,7 +145,7 @@ func bashWrapper() string {
 
 func fishWrapper() string {
 	return `function ali
-    if test "$argv[1]" = "__complete" -o "$argv[1]" = "__completeNoDesc" -o "$argv[1]" = "completion"
+    if test "$argv[1]" = "__complete" -o "$argv[1]" = "__completeNoDesc" -o "$argv[1]" = "completion" -o "$argv[1]" = "chat"
         command ali $argv
         return
     end

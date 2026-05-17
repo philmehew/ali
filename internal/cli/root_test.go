@@ -7,6 +7,7 @@ func TestInterceptArgs_CompletionCommands(t *testing.T) {
 		"add": true, "run": true, "list": true, "ls": true,
 		"edit": true, "remove": true, "rm": true, "move": true, "mv": true,
 		"history": true, "init": true, "install": true,
+		"ai": true, "chat": true,
 		"help": true, "completion": true,
 	}
 
@@ -54,6 +55,16 @@ func TestInterceptArgs_CompletionCommands(t *testing.T) {
 			name: "no args stays unchanged",
 			args: []string{"ali"},
 			want: []string{"ali"},
+		},
+		{
+			name: "ai command stays unchanged",
+			args: []string{"ali", "ai", "find large files"},
+			want: []string{"ali", "ai", "find large files"},
+		},
+		{
+			name: "chat command stays unchanged",
+			args: []string{"ali", "chat"},
+			want: []string{"ali", "chat"},
 		},
 	}
 

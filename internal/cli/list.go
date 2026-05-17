@@ -20,7 +20,7 @@ func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list [keywords...]",
 		Aliases: []string{"ls"},
-		Short: "List stored functions, optionally filtered by keywords",
+		Short:   "List stored functions, optionally filtered by keywords",
 		Long: `List all stored functions, or filter by keywords.
 
 Keywords perform case-insensitive substring matching against the function name,
