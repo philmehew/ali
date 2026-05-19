@@ -646,6 +646,12 @@ func TestCmdSaveAndLoadRoundTrip(t *testing.T) {
 	defer func() { displayOut = old }()
 
 	dir := t.TempDir()
+	// Redirect config to temp dir so loadMemory() doesn't pick up a real MEMORY.md
+	cfgPath := filepath.Join(dir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+	if err := config.Save(&models.AliConfig{}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
 
 	originalHistory := []ai.Message{
 		{Role: ai.RoleSystem, Content: "system prompt"},
@@ -841,4 +847,380 @@ func TestCmdDeleteNotFound(t *testing.T) {
 	if !strings.Contains(buf.String(), "not found") {
 		t.Errorf("expected not found message, got: %q", buf.String())
 	}
+}
+
+func TestMemoryPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	path, err := memoryPath()
+	if err != nil {
+		t.Fatalf("memoryPath() error: %v", err)
+	}
+	if !strings.HasSuffix(path, "MEMORY.md") {
+		t.Errorf("memoryPath() = %q, want suffix MEMORY.md", path)
+	}
+}
+
+func TestLoadMemory(t *testing.T) {
+	t.Run("file exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		content := "always use Python 3.12\nprefer concise answers\n"
+		if err := os.WriteFile(memPath, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		mem := loadMemory()
+		if mem != "always use Python 3.12\nprefer concise answers" {
+			t.Errorf("loadMemory() = %q, want trimmed content", mem)
+		}
+	})
+
+	t.Run("file missing", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		mem := loadMemory()
+		if mem != "" {
+			t.Errorf("loadMemory() = %q, want empty string for missing file", mem)
+		}
+	})
+
+	t.Run("file empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		if err := os.WriteFile(memPath, []byte(""), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		mem := loadMemory()
+		if mem != "" {
+			t.Errorf("loadMemory() = %q, want empty string for empty file", mem)
+		}
+	})
+}
+
+func TestBuildSystemPrompt(t *testing.T) {
+	t.Run("no memory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		result := buildSystemPrompt("You are a helpful assistant.")
+		if result != "You are a helpful assistant." {
+			t.Errorf("buildSystemPrompt() = %q, want base prompt unchanged", result)
+		}
+	})
+
+	t.Run("with memory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		if err := os.WriteFile(memPath, []byte("prefer concise answers\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		result := buildSystemPrompt("You are a helpful assistant.")
+		want := "You are a helpful assistant.\n\n<memory>\nprefer concise answers\n</memory>"
+		if result != want {
+			t.Errorf("buildSystemPrompt() = %q, want %q", result, want)
+		}
+	})
+}
+
+func TestStripMemory(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+		want   string
+	}{
+		{
+			name:   "no memory block",
+			prompt: "You are a helpful assistant.",
+			want:   "You are a helpful assistant.",
+		},
+		{
+			name:   "with memory block",
+			prompt: "You are a helpful assistant.\n\n<memory>\nprefer concise answers\n</memory>",
+			want:   "You are a helpful assistant.",
+		},
+		{
+			name:   "multiline memory",
+			prompt: "You are a helpful assistant.\n\n<memory>\nline one\nline two\n</memory>",
+			want:   "You are a helpful assistant.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripMemory(tt.prompt)
+			if got != tt.want {
+				t.Errorf("stripMemory() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRebuildSystemPrompt(t *testing.T) {
+	t.Run("add memory to base prompt", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		if err := os.WriteFile(memPath, []byte("use Python 3.12\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		history := []ai.Message{
+			{Role: ai.RoleSystem, Content: "You are a helpful assistant."},
+		}
+		rebuildSystemPrompt(&history)
+
+		want := "You are a helpful assistant.\n\n<memory>\nuse Python 3.12\n</memory>"
+		if history[0].Content != want {
+			t.Errorf("history[0].Content = %q, want %q", history[0].Content, want)
+		}
+	})
+
+	t.Run("update existing memory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		if err := os.WriteFile(memPath, []byte("new memory content\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		history := []ai.Message{
+			{Role: ai.RoleSystem, Content: "You are a helpful assistant.\n\n<memory>\nold memory\n</memory>"},
+		}
+		rebuildSystemPrompt(&history)
+
+		want := "You are a helpful assistant.\n\n<memory>\nnew memory content\n</memory>"
+		if history[0].Content != want {
+			t.Errorf("history[0].Content = %q, want %q", history[0].Content, want)
+		}
+	})
+
+	t.Run("no memory file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "functions.yaml")
+		t.Setenv("ALI_CONFIG", cfgPath)
+
+		history := []ai.Message{
+			{Role: ai.RoleSystem, Content: "You are a helpful assistant."},
+		}
+		rebuildSystemPrompt(&history)
+
+		if history[0].Content != "You are a helpful assistant." {
+			t.Errorf("history[0].Content = %q, want unchanged base prompt", history[0].Content)
+		}
+	})
+}
+
+func TestCmdMemoryNoArgs(t *testing.T) {
+	var buf bytes.Buffer
+	old := displayOut
+	displayOut = &buf
+	defer func() { displayOut = old }()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	history := []ai.Message{{Role: ai.RoleSystem, Content: "sys"}}
+
+	t.Run("empty memory", func(t *testing.T) {
+		buf.Reset()
+		cmdMemory("", &history)
+		if !strings.Contains(buf.String(), "Memory is empty") {
+			t.Errorf("expected 'Memory is empty', got: %q", buf.String())
+		}
+	})
+
+	t.Run("non-empty memory", func(t *testing.T) {
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		if err := os.WriteFile(memPath, []byte("prefer concise answers\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		buf.Reset()
+		cmdMemory("", &history)
+		if !strings.Contains(buf.String(), "prefer concise answers") {
+			t.Errorf("expected memory content in output, got: %q", buf.String())
+		}
+		if !strings.Contains(buf.String(), "~") && !strings.Contains(buf.String(), "tokens") {
+			t.Errorf("expected token count in output, got: %q", buf.String())
+		}
+	})
+}
+
+func TestCmdMemoryWithArgs(t *testing.T) {
+	var buf bytes.Buffer
+	old := displayOut
+	displayOut = &buf
+	defer func() { displayOut = old }()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	history := []ai.Message{{Role: ai.RoleSystem, Content: "You are a helpful assistant."}}
+
+	// First addition
+	cmdMemory("prefer concise answers", &history)
+	if !strings.Contains(buf.String(), "Memory updated") {
+		t.Errorf("expected 'Memory updated', got: %q", buf.String())
+	}
+	if !strings.Contains(history[0].Content, "<memory>") {
+		t.Errorf("expected memory block in system prompt, got: %q", history[0].Content)
+	}
+	if !strings.Contains(history[0].Content, "prefer concise answers") {
+		t.Errorf("expected memory content in system prompt, got: %q", history[0].Content)
+	}
+
+	// Second addition
+	buf.Reset()
+	cmdMemory("always use Python 3", &history)
+	if !strings.Contains(buf.String(), "Memory updated") {
+		t.Errorf("expected 'Memory updated', got: %q", buf.String())
+	}
+	if !strings.Contains(history[0].Content, "prefer concise answers") {
+		t.Errorf("expected first memory entry still present, got: %q", history[0].Content)
+	}
+	if !strings.Contains(history[0].Content, "always use Python 3") {
+		t.Errorf("expected second memory entry, got: %q", history[0].Content)
+	}
+
+	// Verify file on disk
+	memPath := filepath.Join(tmpDir, "MEMORY.md")
+	data, err := os.ReadFile(memPath) //nolint:gosec // G304: test path is controlled
+	if err != nil {
+		t.Fatalf("could not read memory file: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "prefer concise answers") {
+		t.Errorf("memory file missing first entry, got: %q", content)
+	}
+	if !strings.Contains(content, "always use Python 3") {
+		t.Errorf("memory file missing second entry, got: %q", content)
+	}
+}
+
+func TestMemorySurvivesClear(t *testing.T) {
+	var buf bytes.Buffer
+	old := displayOut
+	displayOut = &buf
+	defer func() { displayOut = old }()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	memPath := filepath.Join(tmpDir, "MEMORY.md")
+	if err := os.WriteFile(memPath, []byte("persist across clears\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	history := []ai.Message{
+		{Role: ai.RoleSystem, Content: buildSystemPrompt("You are a helpful assistant.")},
+		{Role: ai.RoleUser, Content: "hello"},
+		{Role: ai.RoleAssistant, Content: "hi"},
+	}
+
+	t.Run("clear preserves memory in system prompt", func(t *testing.T) {
+		buf.Reset()
+		trimWarned := false
+		cmdClear("", &history, &trimWarned)
+
+		if !strings.Contains(history[0].Content, "<memory>") {
+			t.Errorf("memory block should survive /clear, got: %q", history[0].Content)
+		}
+	})
+
+	t.Run("clear all preserves memory in system prompt", func(t *testing.T) {
+		buf.Reset()
+		trimWarned := false
+		cmdClear("all", &history, &trimWarned)
+
+		if !strings.Contains(history[0].Content, "<memory>") {
+			t.Errorf("memory block should survive /clear all, got: %q", history[0].Content)
+		}
+	})
+}
+
+func TestHandleChatCommandMemory(t *testing.T) {
+	var buf bytes.Buffer
+	old := displayOut
+	displayOut = &buf
+	defer func() { displayOut = old }()
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	history := []ai.Message{{Role: ai.RoleSystem, Content: "sys"}}
+	trimWarned := false
+	cfg := &models.AIConfig{Model: "test-model", URL: "http://localhost", ContextWindow: 128000}
+	var client *ai.Client
+	budget := 123904
+
+	// /memory with no args should not exit
+	got := handleChatCommand("/memory", &history, &trimWarned, &client, cfg, &budget, new(string))
+	if got {
+		t.Error("handleChatCommand(/memory) should return false (no exit)")
+	}
+}
+
+func TestAppendMemory(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	t.Run("creates file if missing", func(t *testing.T) {
+		if err := appendMemory("first line"); err != nil {
+			t.Fatalf("appendMemory() error: %v", err)
+		}
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		data, err := os.ReadFile(memPath) //nolint:gosec // G304: test path is controlled
+		if err != nil {
+			t.Fatalf("could not read memory file: %v", err)
+		}
+		want := "first line\n"
+		if string(data) != want {
+			t.Errorf("memory file = %q, want %q", string(data), want)
+		}
+	})
+
+	t.Run("appends to existing file", func(t *testing.T) {
+		if err := appendMemory("second line"); err != nil {
+			t.Fatalf("appendMemory() error: %v", err)
+		}
+
+		memPath := filepath.Join(tmpDir, "MEMORY.md")
+		data, err := os.ReadFile(memPath) //nolint:gosec // G304: test path is controlled
+		if err != nil {
+			t.Fatalf("could not read memory file: %v", err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "first line") {
+			t.Errorf("memory file missing first line, got: %q", content)
+		}
+		if !strings.Contains(content, "second line") {
+			t.Errorf("memory file missing second line, got: %q", content)
+		}
+	})
 }

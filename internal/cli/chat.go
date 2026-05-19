@@ -41,6 +41,7 @@ func newChatCmd() *cobra.Command {
 	var defaultWait int
 	var loadName string
 	var deleteName string
+	var memoryText string
 
 	cmd := &cobra.Command{
 		Use:   "chat",
@@ -61,6 +62,8 @@ In-session commands:
   /model <name>   Switch to a different model for this session
   /window         Show context window size
   /window <size>  Set context window size (e.g., /window 128000)
+  /memory                        Show current memory content and file path
+  /memory <text>                 Append text to memory (persists across sessions)
   /save <name>    Save conversation context to a file
   /load           List saved chats
   /load <name>    Load a previously saved conversation
@@ -73,6 +76,11 @@ Use --file and --folder to include file contents at startup.
 Use --cmd to run a command and include its output (--runs and --wait control repetition).
 Use --load <name> to resume a previously saved session.
 Use --delete <name> to delete a saved session.
+Use --memory <text> to append text to memory before starting the session.
+
+Memory is stored in ~/.config/ali/MEMORY.md and automatically loaded into the
+system prompt at the start of each session. Use /memory to view it or /memory <text>
+to add a line. Memory persists across sessions and survives /clear and /load.
 
 Configuration is stored in ~/.config/ali/ai.yaml or set via
 environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
@@ -94,6 +102,15 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 			budget := ai.ContextBudget(cfg.ContextWindow)
 			trimWarned := false
 
+			// Process --memory flag: append text to MEMORY.md before starting.
+			if memoryText != "" {
+				if err := appendMemory(memoryText); err != nil {
+					outputf("Warning: could not append to memory: %v\n", err)
+				} else {
+					outputf("Memory updated: %s\n", memoryText)
+				}
+			}
+
 			var history []ai.Message
 			sessionName := ""
 
@@ -105,7 +122,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 				}
 			} else {
 				history = []ai.Message{
-					{Role: ai.RoleSystem, Content: cfg.ChatPrompt},
+					{Role: ai.RoleSystem, Content: buildSystemPrompt(cfg.ChatPrompt)},
 				}
 			}
 
@@ -265,6 +282,7 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 	cmd.Flags().IntVar(&defaultWait, "wait", 5, "seconds to wait between --cmd runs (default 5)")
 	cmd.Flags().StringVar(&loadName, "load", "", "load a previously saved chat session by name")
 	cmd.Flags().StringVar(&deleteName, "delete", "", "delete a saved chat session by name")
+	cmd.Flags().StringVar(&memoryText, "memory", "", "append text to memory before starting the session")
 	_ = cmd.RegisterFlagCompletionFunc("load", chatNamesCompletion)
 	_ = cmd.RegisterFlagCompletionFunc("delete", chatNamesCompletion)
 
@@ -488,6 +506,8 @@ func handleChatCommand(line string, history *[]ai.Message, trimWarned *bool, cli
 		cmdModel(args, cfg, client)
 	case "/window":
 		cmdWindow(args, cfg, budget)
+	case "/memory":
+		cmdMemory(args, history)
 	case "/save":
 		cmdSave(args, *history, cfg, sessionName)
 	case "/load":
@@ -723,6 +743,9 @@ func cmdContext(args string, history []ai.Message, budget int) {
 	for _, c := range cmdInfos {
 		outputf("  %s (%s runs)\n", c.command, c.runs)
 	}
+	if mem := loadMemory(); mem != "" {
+		outputf("Memory: ~%d tokens\n", ai.EstimateTokens(mem))
+	}
 }
 
 // cmdModel shows or switches the current AI model.
@@ -756,6 +779,61 @@ func cmdWindow(args string, cfg *models.AIConfig, budget *int) {
 	outputf("Context window set to %d tokens (budget: %d)\n", size, *budget)
 }
 
+// appendMemory appends a line of text to the MEMORY.md file, creating it if needed.
+func appendMemory(text string) error {
+	path, err := memoryPath()
+	if err != nil {
+		return fmt.Errorf("could not resolve memory path: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("could not create config directory: %w", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: path is from trusted config resolution.
+	if err != nil {
+		return fmt.Errorf("could not open memory file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	if _, err := f.WriteString(text + "\n"); err != nil {
+		return fmt.Errorf("could not write to memory file: %w", err)
+	}
+
+	return nil
+}
+
+// cmdMemory handles the /memory slash command.
+// With no args, displays current memory content and file path.
+// With args, appends the text to MEMORY.md and updates the system prompt.
+func cmdMemory(args string, history *[]ai.Message) {
+	if args == "" {
+		mem := loadMemory()
+		path, err := memoryPath()
+		if err != nil {
+			outputf("Error: could not resolve memory path: %v\n", err)
+			return
+		}
+		if mem == "" {
+			outputf("Memory is empty. File: %s\n", path)
+		} else {
+			tokens := ai.EstimateTokens(mem)
+			outputf("Memory (%s, ~%d tokens):\n%s\n", path, tokens, mem)
+		}
+		return
+	}
+
+	if err := appendMemory(args); err != nil {
+		outputf("Error: %v\n", err)
+		return
+	}
+
+	rebuildSystemPrompt(history)
+	tokens := ai.EstimateTokens((*history)[0].Content)
+	outputln("Memory updated.")
+	outputf("System prompt: ~%d tokens\n", tokens)
+}
+
 // cmdHelp shows all available in-session commands.
 func cmdHelp() {
 	outputln("Commands:")
@@ -770,6 +848,8 @@ func cmdHelp() {
 	outputln("  /model <name>                  Switch to a different model for this session")
 	outputln("  /window                        Show context window size")
 	outputln("  /window <size>                 Set context window size (e.g., /window 128000)")
+	outputln("  /memory                        Show current memory content and file path")
+	outputln("  /memory <text>                 Append text to memory (persists across sessions)")
 	outputln("  /save <name>                   Save conversation context to a file")
 	outputln("  /load                          List saved chats")
 	outputln("  /load <name>                   Load a previously saved conversation")
@@ -799,6 +879,62 @@ type chatSession struct {
 	ContextWindow int          `json:"context_window"`
 	SavedAt       string       `json:"saved_at"`
 	Messages      []ai.Message `json:"messages"`
+}
+
+// memoryPath returns the path to the MEMORY.md file.
+// It lives in the ali config directory alongside functions.yaml and ai.yaml.
+func memoryPath() (string, error) {
+	dir, err := config.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "MEMORY.md"), nil
+}
+
+// loadMemory reads the MEMORY.md file and returns its trimmed content.
+// Returns empty string if the file does not exist or is empty.
+func loadMemory() string {
+	path, err := memoryPath()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path is from trusted config resolution.
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// buildSystemPrompt constructs the full system prompt by appending the
+// memory block to the base prompt. If there is no memory content, the base
+// prompt is returned unchanged.
+func buildSystemPrompt(base string) string {
+	mem := loadMemory()
+	if mem == "" {
+		return base
+	}
+	return base + "\n\n<memory>\n" + mem + "\n</memory>"
+}
+
+// memoryBlockRe matches the <memory>...</memory> block in a system prompt,
+// including any content (even multiline) between the tags.
+var memoryBlockRe = regexp.MustCompile(`(?s)\n\n<memory>.*</memory>`)
+
+// stripMemory removes a <memory>...</memory> block from a system prompt
+// string, recovering the base prompt.
+func stripMemory(prompt string) string {
+	return strings.TrimSpace(memoryBlockRe.ReplaceAllString(prompt, ""))
+}
+
+// rebuildSystemPrompt strips any existing memory block from the system
+// message and re-appends the current memory from disk. This is idempotent —
+// calling it when no memory file exists leaves the system prompt unchanged.
+func rebuildSystemPrompt(history *[]ai.Message) {
+	if len(*history) == 0 {
+		return
+	}
+	basePrompt := stripMemory((*history)[0].Content)
+	(*history)[0].Content = buildSystemPrompt(basePrompt)
 }
 
 // chatsDir returns the directory for saved chat files, creating it if needed.
@@ -920,6 +1056,7 @@ func cmdLoad(args string, history *[]ai.Message, cfg *models.AIConfig, client **
 	}
 
 	*history = session.Messages
+	rebuildSystemPrompt(history)
 	cfg.Model = session.Model
 	cfg.ContextWindow = session.ContextWindow
 	*client = ai.NewClient(cfg)
