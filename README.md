@@ -148,6 +148,11 @@ Start an interactive chat session with an AI assistant. Responses are streamed i
 |------|-------------|
 | `--file` | Include a file's contents in the conversation context (repeatable) |
 | `--folder` | Include all files in a folder in the conversation context (repeatable, non-recursive) |
+| `--cmd` | Execute a command and include output in context (repeatable) |
+| `--runs` | Number of times to run each `--cmd` (default 5) |
+| `--wait` | Seconds to wait between `--cmd` runs (default 5) |
+| `--load` | Load a previously saved chat session by name |
+| `--delete` | Delete a saved chat session by name |
 
 ```bash
 ali chat
@@ -161,8 +166,15 @@ xargs reads items from stdin and runs a command for each one...
 Added /home/user/project/main.go. Context: 2500/123904 tokens (2%)
 [14%] > explain the ServeHTTP method in this file
 The ServeHTTP method on line 42 handles incoming requests...
-[30%] > /clear
-Conversation cleared. 1 file(s) still in context.
+[30%] > /cmd "ps aux" --runs 3
+Running ps aux (run 1/3)...
+Run 1 completed in 12ms
+...
+Added output from "ps aux" (3/3 runs). Context: 18000/123904 tokens (14%)
+[18%] > what's using the most memory?
+Based on the ps aux output, the process using the most memory is...
+[22%] > /clear
+Conversation cleared. 1 file(s) and 1 command(s) still in context.
 [5%] > /exit
 ```
 
@@ -172,9 +184,13 @@ Use `--file` and `--folder` to include code, configs, or logs in the context so 
 ali chat --file main.go --file config.yaml
 ali chat --folder ./src
 ali chat --folder ./src --file README.md
+ali chat --cmd "top" --runs 5 --wait 3
+ali chat --cmd "ps aux" --file server.log
+ali chat --load mysession
+ali chat --delete mysession
 ```
 
-Files larger than 1MB and binary files are skipped with a warning. When the conversation exceeds the context window budget, the oldest messages are trimmed automatically.
+Files larger than 1MB and binary files are skipped with a warning. Command output is truncated at 100KB per run with a `[truncated]` marker. When the conversation exceeds the context window budget, the oldest messages are trimmed automatically.
 
 **In-session commands:**
 
@@ -182,20 +198,25 @@ Files larger than 1MB and binary files are skipped with a warning. When the conv
 |---------|-------------|
 | `/file <path>` | Add a file to the conversation context |
 | `/folder <path>` | Add all files in a folder (non-recursive) |
-| `/files` | List files currently in context |
-| `/clear` | Clear conversation history (keeps file context) |
-| `/clear all` | Clear conversation and file context |
-| `/context` | Show token usage, budget, and turn count |
+| `/cmd <command> [--runs <n>] [--wait <s>]` | Execute a command N times and add output to context (default 5 runs, 5s wait) |
+| `/clear` | Clear conversation history (keeps file and command context) |
+| `/clear all` | Clear conversation, file, and command context |
+| `/context` | Show token usage, budget, turn count, and context details |
+| `/context all` | Dump full content of all messages in context (debug) |
 | `/model` | Show current model, URL, and context window |
 | `/model <name>` | Switch to a different model for this session |
 | `/window` | Show context window size |
 | `/window <size>` | Set context window size (e.g., `/window 128000`) |
+| `/save <name>` | Save conversation context to a file |
+| `/load` | List saved chats |
+| `/load <name>` | Load a previously saved conversation |
+| `/delete <name>` | Delete a saved chat session |
 | `/help` | Show all commands |
 | `/exit`, `/quit` | End the session |
 
 Use `//` to send a message that starts with `/` (e.g., `//file not a command`).
 
-Press Ctrl+C during a response to interrupt the AI and keep the partial output in the conversation. Chat history is kept in memory for the session but not persisted.
+Press Ctrl+C during a response to interrupt the AI and keep the partial output in the conversation. Chat history is kept in memory for the session but not persisted — use `/save` to persist a conversation and `/load` to restore it later.
 
 ### `ali add <name> <body>`
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -56,4 +57,33 @@ func functionParamsCompletion(cmd *cobra.Command, args []string, toComplete stri
 	}
 
 	return nil, cobra.ShellCompDirectiveDefault
+}
+
+// chatNamesCompletion returns saved chat session names as completions for the --load flag.
+func chatNamesCompletion(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	dir, err := chatsDir()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var completions []cobra.Completion
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), ".json")
+		if !strings.HasPrefix(name, toComplete) {
+			continue
+		}
+		completions = append(completions, name)
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
 }

@@ -2,6 +2,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -266,5 +268,101 @@ func TestPrintShellConfig_NoCompletionSnippet(t *testing.T) {
 				t.Errorf("init output should not contain completion setup, got: %q", output)
 			}
 		})
+	}
+}
+
+func TestChatNamesCompletion(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	// Create config file so config.Dir() resolves correctly.
+	if err := config.Save(&models.AliConfig{}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Create chats directory with some saved sessions.
+	chatDir := filepath.Join(tmpDir, "chats")
+	if err := os.MkdirAll(chatDir, 0o750); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	for _, name := range []string{"debug-session.json", "project-review.json", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(chatDir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name       string
+		toComplete string
+		wantNames  []string
+		wantDir    cobra.ShellCompDirective
+	}{
+		{
+			name:       "empty prefix returns all json files",
+			toComplete: "",
+			wantNames:  []string{"debug-session", "project-review"},
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "prefix debug matches one",
+			toComplete: "debug",
+			wantNames:  []string{"debug-session"},
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "prefix project matches one",
+			toComplete: "project",
+			wantNames:  []string{"project-review"},
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "prefix xyz matches nothing",
+			toComplete: "xyz",
+			wantNames:  nil,
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			completions, dir := chatNamesCompletion(nil, nil, tt.toComplete)
+			if dir != tt.wantDir {
+				t.Errorf("directive = %v, want %v", dir, tt.wantDir)
+			}
+			if len(completions) != len(tt.wantNames) {
+				t.Errorf("got %d completions, want %d: %v", len(completions), len(tt.wantNames), completions)
+			}
+			for _, want := range tt.wantNames {
+				found := false
+				for _, c := range completions {
+					if string(c) == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("missing completion %q in %v", want, completions)
+				}
+			}
+		})
+	}
+}
+
+func TestChatNamesCompletion_EmptyDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	if err := config.Save(&models.AliConfig{}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	completions, dir := chatNamesCompletion(nil, nil, "")
+	if dir != cobra.ShellCompDirectiveNoFileComp {
+		t.Errorf("directive = %v, want NoFileComp", dir)
+	}
+	if len(completions) != 0 {
+		t.Errorf("expected no completions for empty chats dir, got %v", completions)
 	}
 }
