@@ -71,13 +71,6 @@ type streamChunk struct {
 	} `json:"choices"`
 }
 
-// errorResponse represents an API error response.
-type errorResponse struct {
-	Error struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
 // isRetryable reports whether an HTTP status code indicates a transient error
 // that may succeed on retry (429 Too Many Requests or 5xx server errors).
 func isRetryable(statusCode int) bool {
@@ -252,18 +245,7 @@ func (c *Client) readStream(resp *http.Response, onToken func(string)) (string, 
 // parseError extracts a human-readable error from an API error response.
 func (c *Client) parseError(resp *http.Response) error {
 	body, _ := io.ReadAll(resp.Body)
-
-	var errResp errorResponse
-	if json.Unmarshal(body, &errResp) == nil && errResp.Error.Message != "" {
-		switch resp.StatusCode {
-		case http.StatusUnauthorized:
-			return fmt.Errorf("authentication failed: check your AI API key")
-		case http.StatusTooManyRequests:
-			return fmt.Errorf("rate limited by AI service: please try again")
-		default:
-			return fmt.Errorf("AI service error (status %d): %s", resp.StatusCode, errResp.Error.Message)
-		}
-	}
+	msg := extractErrorMessage(body)
 
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
@@ -271,6 +253,33 @@ func (c *Client) parseError(resp *http.Response) error {
 	case http.StatusTooManyRequests:
 		return fmt.Errorf("rate limited by AI service: please try again")
 	default:
+		if msg != "" {
+			return fmt.Errorf("AI service error (status %d): %s", resp.StatusCode, msg)
+		}
 		return fmt.Errorf("AI service error (status %d)", resp.StatusCode)
 	}
+}
+
+// extractErrorMessage tries to pull a human-readable message from the response body.
+// Handles OpenAI-style {"error":{"message":"..."}} and flat {"error":"..."} formats.
+func extractErrorMessage(body []byte) string {
+	// OpenAI standard: {"error":{"message":"..."}}
+	var nested struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &nested) == nil && nested.Error.Message != "" {
+		return nested.Error.Message
+	}
+
+	// Flat variant: {"error":"..."}
+	var flat struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(body, &flat) == nil && flat.Error != "" {
+		return flat.Error
+	}
+
+	return strings.TrimSpace(string(body))
 }
