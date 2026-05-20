@@ -550,6 +550,7 @@ func TestIsContextMessage(t *testing.T) {
 	}{
 		{name: "file context", msg: ai.Message{Content: "<file path=\"a.txt\">data</file>"}, want: true},
 		{name: "cmd context", msg: ai.Message{Content: "<cmd command=\"top\" runs=\"5\">output</cmd>"}, want: true},
+		{name: "stdin context", msg: ai.Message{Content: "<stdin>\ndata\n</stdin>"}, want: true},
 		{name: "regular message", msg: ai.Message{Content: "hello"}, want: false},
 		{name: "empty", msg: ai.Message{Content: ""}, want: false},
 	}
@@ -1291,4 +1292,49 @@ func TestAppendMemory(t *testing.T) {
 			t.Errorf("memory file missing second line, got: %q", content)
 		}
 	})
+}
+
+func TestReadStdinTerminal(t *testing.T) {
+	// When stdin is a terminal, readStdin should return empty string.
+	data, err := readStdin()
+	if err != nil {
+		t.Fatalf("readStdin() error: %v", err)
+	}
+	// In a test environment, stdin may or may not be a terminal.
+	// We just verify it doesn't error and returns a string.
+	_ = data
+}
+
+func TestAddContextToHistoryWithStdin(t *testing.T) {
+	history := []ai.Message{
+		{Role: ai.RoleSystem, Content: "sys"},
+	}
+	stdinContent := "<stdin>\nhello from pipe\n</stdin>\n"
+	addContextToHistory(&history, stdinContent)
+	if len(history) != 2 {
+		t.Fatalf("history length = %d, want 2", len(history))
+	}
+	if !isContextMessage(history[1]) {
+		t.Errorf("history[1] should be context message, got: %q", history[1].Content[:20])
+	}
+	if !strings.Contains(history[1].Content, "<stdin>") {
+		t.Errorf("history[1] should contain <stdin> tag, got: %q", history[1].Content)
+	}
+}
+
+func TestCmdHelpIncludesPiping(t *testing.T) {
+	var buf bytes.Buffer
+	old := displayOut
+	displayOut = &buf
+	defer func() { displayOut = old }()
+
+	cmdHelp()
+
+	out := buf.String()
+	if !strings.Contains(out, "one-shot") {
+		t.Errorf("help output missing 'one-shot', got: %q", out)
+	}
+	if !strings.Contains(out, "Pipe stdin") {
+		t.Errorf("help output missing 'Pipe stdin', got: %q", out)
+	}
 }
