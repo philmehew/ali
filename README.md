@@ -112,6 +112,18 @@ ali edit glog
 
 # Remove a function
 ali remove glog
+
+# Ask the AI to generate a command
+ali ai find all go files larger than 1MB    # pastes: find . -name "*.go" -size +1M
+
+# Chat with the AI (interactive)
+ali chat
+
+# Chat one-shot — response goes to stdout
+ali chat "what is 2+2"
+
+# Pipe content as context
+cat main.go | ali chat "explain this" > response.txt
 ```
 
 ## Commands
@@ -144,6 +156,8 @@ On first run, an interactive setup wizard will prompt for your API key (with hid
 
 Start an interactive chat session with an AI assistant. Responses are streamed in real time.
 
+**Piping and one-shot mode:** Piped stdin is automatically added as context (wrapped in `<stdin>` tags). Positional arguments form the initial prompt. When a prompt is provided, `ali chat` sends it, streams the response to stdout, and exits — making it easy to pipe or redirect. Without a prompt, `ali chat` enters interactive mode (using `/dev/tty` if stdin was piped).
+
 | Flag | Description |
 |------|-------------|
 | `--file` | Include a file's contents in the conversation context (repeatable) |
@@ -153,6 +167,7 @@ Start an interactive chat session with an AI assistant. Responses are streamed i
 | `--wait` | Seconds to wait between `--cmd` runs (default 5) |
 | `--load` | Load a previously saved chat session by name |
 | `--delete` | Delete a saved chat session by name |
+| *args* | Positional arguments form the prompt (one-shot mode) |
 
 ```bash
 ali chat
@@ -188,6 +203,13 @@ ali chat --cmd "top" --runs 5 --wait 3
 ali chat --cmd "ps aux" --file server.log
 ali chat --load mysession
 ali chat --delete mysession
+
+# One-shot mode — response goes to stdout
+ali chat "what is 2+2"
+
+# Piped stdin as context + one-shot + redirect
+cat main.go | ali chat "explain this function" > response.txt
+curl -s https://example.com/api/status | ali chat "is the service healthy?"
 ```
 
 Files larger than 1MB and binary files are skipped with a warning. Command output is truncated at 100KB per run with a `[truncated]` marker. When the conversation exceeds the context window budget, the oldest messages are trimmed automatically.
