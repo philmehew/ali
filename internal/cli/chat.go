@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -28,9 +29,22 @@ import (
 const maxFileSize = 1024 * 1024 // 1MB — skip files larger than this
 
 // isContextMessage reports whether a message contains preserved context
-// (file or command output) that should survive /clear and trimming.
+// (file, stdin, or command output) that should survive /clear and trimming.
 func isContextMessage(msg ai.Message) bool {
-	return strings.HasPrefix(msg.Content, "<file") || strings.HasPrefix(msg.Content, "<cmd")
+	return strings.HasPrefix(msg.Content, "<file") || strings.HasPrefix(msg.Content, "<cmd") || strings.HasPrefix(msg.Content, "<stdin")
+}
+
+// readStdin reads all data from stdin if it is piped (not a terminal).
+// Returns empty string when stdin is a terminal.
+func readStdin() (string, error) {
+	if isTerminal(os.Stdin) {
+		return "", nil
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("could not read stdin: %w", err)
+	}
+	return string(data), nil
 }
 
 func newChatCmd() *cobra.Command {
@@ -83,9 +97,18 @@ system prompt at the start of each session. Use /memory to view it or /memory <t
 to add a line. Memory persists across sessions and survives /clear and /load.
 
 Configuration is stored in ~/.config/ali/ai.yaml or set via
-environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
-		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
+environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.
+
+Piping and one-shot mode:
+  Piped stdin is automatically added as context, wrapped in <stdin> tags.
+  Positional arguments form the initial prompt message.
+  When a prompt is provided, ali sends it (with any context), streams the
+  response to stdout, and exits — making it easy to pipe or redirect:
+    cat file.py | ali chat "explain this" > response.txt
+  Without a prompt, ali enters interactive mode (using /dev/tty if stdin
+  was piped).`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, args []string) error {
 			cfg, err := config.LoadAIConfig()
 			if err != nil {
 				return fmt.Errorf("could not load AI config: %w", err)
@@ -159,9 +182,9 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 				cmdCount := 0
 
 				for _, c := range cmds {
-					output, ok := ingestCmd(c, defaultRuns, time.Duration(defaultWait)*time.Second)
+					out, ok := ingestCmd(c, defaultRuns, time.Duration(defaultWait)*time.Second)
 					if ok > 0 {
-						content.WriteString(output)
+						content.WriteString(out)
 						cmdCount++
 					}
 				}
@@ -173,6 +196,73 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 				}
 			}
 
+			// Ingest piped stdin as context.
+			stdinData, err := readStdin()
+			if err != nil {
+				outputf("Warning: could not read stdin: %v\n", err)
+			}
+			if stdinData != "" {
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "<stdin>\n%s\n</stdin>\n", stdinData)
+				addContextToHistory(&history, sb.String())
+				outputf("Ingested stdin (~%d tokens). Context budget: %d tokens.\n\n", ai.EstimateTokens(stdinData), budget)
+			}
+
+			prompt := strings.TrimSpace(strings.Join(args, " "))
+
+			// One-shot mode: positional args form the prompt.
+			if prompt != "" {
+				history = append(history, ai.Message{Role: ai.RoleUser, Content: prompt})
+				history, trimWarned = trimHistory(history, budget, trimWarned)
+
+				if historyTokens(history) > budget {
+					outputf("Warning: context (%d tokens) exceeds budget (%d tokens). Response may be truncated.\n\n", historyTokens(history), budget)
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+				done := make(chan struct{})
+				var printed strings.Builder
+
+				sigCh := make(chan os.Signal, 1)
+				signal.Notify(sigCh, os.Interrupt)
+				go func() {
+					select {
+					case <-sigCh:
+						close(done)
+						cancel()
+					case <-ctx.Done():
+					}
+					signal.Stop(sigCh)
+				}()
+
+				_, streamErr := client.CompleteStream(ctx, history, func(token string) {
+					select {
+					case <-done:
+						return
+					default:
+					}
+					_, _ = fmt.Fprint(os.Stdout, token)
+					printed.WriteString(token)
+				})
+				signal.Stop(sigCh)
+
+				if streamErr != nil {
+					wasCanceled := ctx.Err() == context.Canceled
+					cancel()
+					if wasCanceled {
+						fmt.Fprintln(os.Stderr)
+						fmt.Fprintln(os.Stderr, "[interrupted]")
+					} else {
+						fmt.Fprintf(os.Stderr, "\nError: %v\n", streamErr)
+					}
+					os.Exit(1)
+				}
+				cancel()
+
+				_, _ = fmt.Fprintln(os.Stdout)
+				return nil
+			}
+
 			// Warn if initial context exceeds budget.
 			if historyTokens(history) > budget {
 				outputf("Warning: initial context (%d tokens) exceeds budget (%d tokens). Responses may be truncated.\n\n", historyTokens(history), budget)
@@ -181,7 +271,17 @@ environment variables: ALI_AI_URL, ALI_AI_API_KEY, ALI_AI_MODEL.`,
 			outputln("ali chat — type /help for commands, /exit to quit")
 			outputln()
 
-			reader := bufio.NewReader(os.Stdin)
+			// When stdin was piped, open /dev/tty for interactive input.
+			var reader *bufio.Reader
+			if stdinData != "" {
+				tty, ttyErr := os.Open("/dev/tty")
+				if ttyErr != nil {
+					return fmt.Errorf("stdin was piped but /dev/tty is unavailable: %w", ttyErr)
+				}
+				reader = bufio.NewReader(tty)
+			} else {
+				reader = bufio.NewReader(os.Stdin)
+			}
 			trimWarned = false
 
 			for {
@@ -861,6 +961,8 @@ func cmdHelp() {
 	outputln()
 	outputln("Type a message to chat with the AI.")
 	outputln("Use // to send a message that starts with /.")
+	outputln("Use positional args for one-shot mode: ali chat \"explain this\"")
+	outputln("Pipe stdin as context: cat file | ali chat \"explain this\"")
 }
 
 // addContextToHistory appends preserved context content (file or command output)
