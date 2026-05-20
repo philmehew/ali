@@ -514,6 +514,8 @@ func handleChatCommand(line string, history *[]ai.Message, trimWarned *bool, cli
 		cmdLoad(args, history, cfg, client, budget, trimWarned, sessionName)
 	case "/delete":
 		cmdDelete(args)
+	case "/help":
+		cmdHelp()
 	default:
 		outputf("Unknown command: %s. Type /help for available commands.\n", cmd)
 	}

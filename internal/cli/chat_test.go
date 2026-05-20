@@ -122,6 +122,14 @@ func TestHandleChatCommand(t *testing.T) {
 		{name: "folder no args", line: "/folder", wantExit: false, wantOut: "Usage: /folder <path>"},
 		{name: "cmd no args", line: "/cmd", wantExit: false, wantOut: "Usage: /cmd <command>"},
 		{name: "save no args", line: "/save", wantExit: false, wantOut: "Usage: /save <name>"},
+		{name: "help", line: "/help", wantExit: false, wantOut: "/help"},
+		{name: "clear", line: "/clear", wantExit: false, wantOut: "Conversation cleared"},
+		{name: "clear all", line: "/clear all", wantExit: false, wantOut: "Conversation, file, and command context cleared"},
+		{name: "context", line: "/context", wantExit: false, wantOut: "Context:"},
+		{name: "model", line: "/model", wantExit: false, wantOut: "Model:"},
+		{name: "model switch", line: "/model gpt-4o", wantExit: false, wantOut: "test-model -> gpt-4o"},
+		{name: "window", line: "/window", wantExit: false, wantOut: "Context window:"},
+		{name: "memory", line: "/memory", wantExit: false, wantOut: "Memory"},
 	}
 
 	for _, tt := range tests {
@@ -131,7 +139,15 @@ func TestHandleChatCommand(t *testing.T) {
 			displayOut = &buf
 			defer func() { displayOut = old }()
 
+			// /clear and /clear all need real history to produce meaningful output
 			history := []ai.Message{{Role: "system", Content: "sys"}}
+			if tt.name == "clear" || tt.name == "clear all" {
+				history = append(history,
+					ai.Message{Role: ai.RoleUser, Content: "hello"},
+					ai.Message{Role: ai.RoleAssistant, Content: "hi"},
+				)
+			}
+
 			trimWarned := false
 			cfg := &models.AIConfig{Model: "test-model", URL: "http://localhost", ContextWindow: 128000}
 			var client *ai.Client
@@ -146,6 +162,58 @@ func TestHandleChatCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleChatCommandLoadDelete(t *testing.T) {
+	// /load and /delete need a config directory so chatNamesCompletion/chatsDir resolves.
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "functions.yaml")
+	t.Setenv("ALI_CONFIG", cfgPath)
+	if err := config.Save(&models.AliConfig{}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	t.Run("/load no args", func(t *testing.T) {
+		var buf bytes.Buffer
+		old := displayOut
+		displayOut = &buf
+		defer func() { displayOut = old }()
+
+		history := []ai.Message{{Role: "system", Content: "sys"}}
+		trimWarned := false
+		cfg := &models.AIConfig{Model: "test-model", URL: "http://localhost", ContextWindow: 128000}
+		var client *ai.Client
+		budget := 123904
+
+		got := handleChatCommand("/load", &history, &trimWarned, &client, cfg, &budget, new(string))
+		if got {
+			t.Error("handleChatCommand(/load) should return false (no exit)")
+		}
+		if !strings.Contains(buf.String(), "No saved chats") {
+			t.Errorf("expected 'No saved chats' in output, got: %q", buf.String())
+		}
+	})
+
+	t.Run("/delete no args", func(t *testing.T) {
+		var buf bytes.Buffer
+		old := displayOut
+		displayOut = &buf
+		defer func() { displayOut = old }()
+
+		history := []ai.Message{{Role: "system", Content: "sys"}}
+		trimWarned := false
+		cfg := &models.AIConfig{Model: "test-model", URL: "http://localhost", ContextWindow: 128000}
+		var client *ai.Client
+		budget := 123904
+
+		got := handleChatCommand("/delete", &history, &trimWarned, &client, cfg, &budget, new(string))
+		if got {
+			t.Error("handleChatCommand(/delete) should return false (no exit)")
+		}
+		if !strings.Contains(buf.String(), "Use /delete <name> to delete a chat") {
+			t.Errorf("expected delete hint in output, got: %q", buf.String())
+		}
+	})
 }
 
 func TestCmdClear(t *testing.T) {
