@@ -31,24 +31,43 @@ func functionNamesCompletion(_ *cobra.Command, _ []string, toComplete string) ([
 	return completions, cobra.ShellCompDirectiveNoFileComp
 }
 
-// functionParamsCompletion completes function names for the first argument
-// and default parameter values for subsequent arguments.
+// functionParamsCompletion completes function names at the start of a chain,
+// immediately after a "+" separator, and default parameter values for
+// subsequent arguments of the active command.
 func functionParamsCompletion(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	if len(args) == 0 {
+	dash := -1
+	if cmd != nil {
+		dash = cmd.Flags().ArgsLenAtDash()
+	}
+	chainingAllowed := func(i int) bool { return dash < 0 || i < dash }
+
+	// No command has started yet, or the previous argument was a "+"
+	// separator: the user is typing a new command name.
+	if len(args) == 0 || (args[len(args)-1] == "+" && chainingAllowed(len(args)-1)) {
 		return functionNamesCompletion(cmd, args, toComplete)
 	}
+
+	// Find where the command currently being typed starts, skipping any
+	// "+" separators before it (and ignoring "+" after "--").
+	start := 0
+	for i, arg := range args {
+		if arg == "+" && chainingAllowed(i) {
+			start = i + 1
+		}
+	}
+	segment := args[start:]
 
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	fn := resolveFunction(cfg, args[0])
+	fn := resolveFunction(cfg, segment[0])
 	if fn == nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	paramIdx := len(args) - 1
+	paramIdx := len(segment) - 1
 	if paramIdx < len(fn.Defaults) && fn.Defaults[paramIdx] != "" {
 		dv := fn.Defaults[paramIdx]
 		if strings.HasPrefix(dv, toComplete) {

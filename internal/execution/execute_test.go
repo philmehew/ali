@@ -155,6 +155,45 @@ func TestCommandString(t *testing.T) {
 	}
 }
 
+func TestJoinCommands(t *testing.T) {
+	tests := []struct {
+		name string
+		cmds []*ResolvedCommand
+		want string
+	}{
+		{
+			name: "single command",
+			cmds: []*ResolvedCommand{{Command: "git status"}},
+			want: "git status",
+		},
+		{
+			name: "two commands",
+			cmds: []*ResolvedCommand{
+				{Command: "docker compose up -d"},
+				{Command: "docker compose logs -f cell"},
+			},
+			want: "docker compose up -d ; docker compose logs -f cell",
+		},
+		{
+			name: "three commands with extras",
+			cmds: []*ResolvedCommand{
+				{Command: "echo hello", Extras: []string{"world"}},
+				{Command: "git status"},
+				{Command: "find . -name '*.go'"},
+			},
+			want: "echo hello 'world' ; git status ; find . -name '*.go'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := JoinCommands(tt.cmds); got != tt.want {
+				t.Errorf("JoinCommands() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShellArgEscape(t *testing.T) {
 	tests := []struct {
 		input    string

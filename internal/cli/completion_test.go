@@ -173,6 +173,86 @@ func TestFunctionParamsCompletion(t *testing.T) {
 	})
 }
 
+func TestFunctionParamsCompletion_Chained(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := tmpDir + "/functions.yaml"
+	t.Setenv("ALI_CONFIG", cfgPath)
+
+	cfg := &models.AliConfig{
+		Functions: []models.AliFunction{
+			{Name: "dockup", Body: "docker compose up -d"},
+			{Name: "cellog", Body: "docker compose logs -f cell"},
+			{Name: "deploy", Body: "kubectl apply -f $1 --env $2", Defaults: []string{"staging", "prod"}},
+		},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	cmd := newRunCmd()
+	completionNames := func(completions []cobra.Completion) []string {
+		names := make([]string, len(completions))
+		for i, c := range completions {
+			names[i] = strings.SplitN(string(c), "\t", 2)[0]
+		}
+		return names
+	}
+
+	tests := []struct {
+		name       string
+		args       []string
+		toComplete string
+		wantNames  []string
+		wantDir    cobra.ShellCompDirective
+	}{
+		{
+			name:       "after separator offers function names",
+			args:       []string{"dockup", "+"},
+			toComplete: "",
+			wantNames:  []string{"dockup", "cellog", "deploy"},
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "after separator filters names by prefix",
+			args:       []string{"dockup", "+"},
+			toComplete: "cel",
+			wantNames:  []string{"cellog"},
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "defaults still offered for the second command",
+			args:       []string{"dockup", "+", "deploy"},
+			toComplete: "",
+			wantNames:  []string{"staging"},
+			wantDir:    cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:       "beyond defaults falls back to file comp",
+			args:       []string{"dockup", "+", "deploy", "staging", "prod"},
+			toComplete: "",
+			wantDir:    cobra.ShellCompDirectiveDefault,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			completions, dir := functionParamsCompletion(cmd, tt.args, tt.toComplete)
+			if dir != tt.wantDir {
+				t.Errorf("directive = %v, want %v", dir, tt.wantDir)
+			}
+			got := completionNames(completions)
+			if len(got) != len(tt.wantNames) {
+				t.Fatalf("got %v, want %v", got, tt.wantNames)
+			}
+			for i := range tt.wantNames {
+				if got[i] != tt.wantNames[i] {
+					t.Errorf("completion %d = %q, want %q", i, got[i], tt.wantNames[i])
+				}
+			}
+		})
+	}
+}
+
 func TestFunctionNamesCompletion_EmptyConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgPath := tmpDir + "/functions.yaml"
