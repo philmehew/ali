@@ -95,12 +95,33 @@ func CommandString(resolved *ResolvedCommand) string {
 	return cmdStr
 }
 
+// chainSeparator joins chained commands on a single line so the shell
+// wrappers can paste the whole chain into the input buffer at once.
+const chainSeparator = " ; "
+
+// JoinCommands joins multiple resolved commands into a single line,
+// separated by "; " so each command runs in sequence.
+func JoinCommands(cmds []*ResolvedCommand) string {
+	parts := make([]string, len(cmds))
+	for i, cmd := range cmds {
+		parts[i] = CommandString(cmd)
+	}
+	return strings.Join(parts, chainSeparator)
+}
+
 // PasteCommand writes the resolved command to stdout and exits.
 // In shell integration mode (stdout is captured by the wrapper),
 // this outputs the command for the wrapper to paste into the
 // shell's input buffer. Without the wrapper, the command is
 // simply displayed for the user.
 func PasteCommand(resolved *ResolvedCommand) {
-	_, _ = fmt.Fprintln(os.Stdout, CommandString(resolved))
+	PasteCommands([]*ResolvedCommand{resolved})
+}
+
+// PasteCommands writes a chain of resolved commands to stdout as a single
+// line and exits. This mirrors PasteCommand and is used by `ali run` when
+// multiple functions are chained with "+".
+func PasteCommands(cmds []*ResolvedCommand) {
+	_, _ = fmt.Fprintln(os.Stdout, JoinCommands(cmds))
 	os.Exit(0)
 }

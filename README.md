@@ -99,6 +99,9 @@ ali run glog 20
 # Use the short alias
 ali r glog 20
 
+# Chain multiple functions with a standalone "+"
+ali r dockup + cellog
+
 # List all functions
 ali list
 
@@ -138,6 +141,28 @@ ali run glog 20       # overrides $1 with "20"
 ali r glog 20         # same thing, using the 'r' alias
 ali run 3             # resolve function #3 from ali list
 ali run mygrep TODO . # supplies $1=TODO, $2=.
+```
+
+#### Chaining commands
+
+Separate commands with a standalone `+` to paste them as one editable line:
+
+```bash
+ali r dockup + cellog
+# pastes: docker compose up -d ; docker compose logs -f cell
+
+ali r glog 20 + dockup    # parameters stay with their own command
+ali r 3 + 5               # mix list numbers and names
+```
+
+- `+` must be its own argument (spaces on both sides). `+5`, `5+`, and `a+b` are treated as ordinary parameters, not separators.
+- Each command is resolved independently, using its own parameters and defaults.
+- Chained commands are joined with ` ; `, so every command runs even if an earlier one fails.
+- `--` disables chaining for every argument after it, which also lets you pass a literal `+` or dash-leading extras:
+
+```bash
+ali r myfn -- +            # passes a literal "+" as an argument
+ali r find "*.go" -- -type f
 ```
 
 ### `ali ai <query>`
@@ -452,12 +477,14 @@ ali run glog 20    # $1=20 (override)
 
 ### Extra arguments
 
-Arguments beyond the highest `$N` placeholder are appended to the command with proper shell escaping:
+Arguments beyond the highest `$N` placeholder are appended to the command with proper shell escaping. Use `--` before dash-leading extras so they are not parsed as flags:
 
 ```bash
 ali add find "find . -name \$1" -D "*.go"
-ali run find "*.go" -type f   # resolves: find . -name '*.go' '-type' 'f'
+ali run find "*.go" -- -type f   # resolves: find . -name '*.go' '-type' 'f'
 ```
+
+A standalone `+` starts a chained command (see above); put it after `--` to pass it as a literal argument.
 
 ### Shell escaping
 

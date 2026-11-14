@@ -27,9 +27,10 @@ Linting: `golangci-lint run --config=.golangci.yml ./…` (config in `.golangci.
 
 **Data flow for command resolution (paste mode):**
 1. `cli/run.go` calls `config.Load()` to read YAML
-2. `config.FindFunction()` looks up the function by name
-3. `execution.Resolve()` merges runtime args with defaults, substitutes `$1`..`$N` in the body (descending order to avoid `$1` matching prefix of `$10`)
-4. `execution.PasteCommand()` formats the resolved command (appending extras with shell escaping) and writes it to stdout, then exits. A shell wrapper function (set up by `ali init`) captures this output and pastes it into the shell's input buffer using `print -z` (zsh), `read -e -i` (bash), or `commandline --replace` (fish).
+2. `splitChainArgs()` splits the args into one segment per command: a standalone `+` argument separates commands, and a `+` at or after `--` is an ordinary argument. `resolveChain()` then resolves each segment independently.
+3. `config.FindFunction()` looks up each function by name (or `resolveFunction` by 1-based list index)
+4. `execution.Resolve()` merges runtime args with defaults, substitutes `$1`..`$N` in the body (descending order to avoid `$1` matching prefix of `$10`)
+5. `execution.PasteCommands()` formats the resolved commands (appending extras with shell escaping), joins them with ` ; ` on one line, writes to stdout, then exits. A shell wrapper function (set up by `ali init`) captures this output and pastes it into the shell's input buffer using `print -z` (zsh), `read -e -i` (bash), or `commandline --replace` (fish). `PasteCommand()` remains as the single-command wrapper used by interactive `ali list`.
 
 **Output routing (isatty):** `internal/cli/output.go` detects whether stdout is a terminal. When stdout is captured (e.g., by the shell wrapper's `$()`), all display output (menus, prompts, errors) is redirected to stderr so the user still sees it. Only the resolved command goes to stdout (where the wrapper captures it). When stdout is a terminal (no wrapper), display output goes to stdout as normal.
 
